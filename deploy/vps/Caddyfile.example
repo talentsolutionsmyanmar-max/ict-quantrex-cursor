@@ -1,0 +1,13 @@
+# Install Caddy on Ubuntu, then:
+#   sudo cp deploy/vps/Caddyfile.example /etc/caddy/Caddyfile
+#   sudo systemctl enable --now caddy
+# Ensure UFW: sudo ufw allow 80,443/tcp
+#
+# DNS at your registrar (e.g. Zoho): point @ and www A records to this droplet's public IP.
+
+quantrex.solutions, www.quantrex.solutions {
+	# Socket.IO: long-polling + WebSocket upgrade; flush_interval helps some clients behind TLS.
+	reverse_proxy 127.0.0.1:5050 {
+		flush_interval -1
+	}
+}

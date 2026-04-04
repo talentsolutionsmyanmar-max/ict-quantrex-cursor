@@ -1,0 +1,14 @@
+[Unit]
+Description=ICT Chief QE weekly sweep (scripts/chief_qe_sweep.py)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=trader
+WorkingDirectory=/home/trader/ict-backend
+Environment=PATH=/home/trader/ict-backend/venv/bin:/usr/bin:/bin
+EnvironmentFile=-/home/trader/ict-backend/.env
+# Adjust WorkingDirectory if your repo is elsewhere (e.g. ict-trading-dashboard).
+ExecStart=/home/trader/ict-backend/deploy/vps/run-weekly-qe.sh
+TimeoutStartSec=6h
+Nice=5

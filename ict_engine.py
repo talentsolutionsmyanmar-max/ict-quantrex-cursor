@@ -1,0 +1,236 @@
+import pandas as pd
+import numpy as np
+from regime import annotate_regime
+
+
+class ICTEngine:
+    def __init__(self, config):
+        self.config = config
+        self.liquidity_highs = []
+        self.liquidity_lows = []
+        self.fvg_zones = []
+
+    def detect_liquidity_pools(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        df["swing_high"] = (
+            (df["high"].shift(2) < df["high"].shift(1))
+            & (df["high"] > df["high"].shift(1))
+            & (df["high"] > df["high"].shift(-1))
+            & (df["high"] > df["high"].shift(-2))
+        )
+
+        df["swing_low"] = (
+            (df["low"].shift(2) > df["low"].shift(1))
+            & (df["low"] < df["low"].shift(1))
+            & (df["low"] < df["low"].shift(-1))
+            & (df["low"] < df["low"].shift(-2))
+        )
+
+        self.liquidity_highs = df.loc[df["swing_high"], "high"].dropna().tolist()
+        self.liquidity_lows = df.loc[df["swing_low"], "low"].dropna().tolist()
+
+        # Correct forward-filled previous swing levels
+        df["liquidity_high_prev"] = pd.Series(np.where(df["swing_high"], df["high"], np.nan), index=df.index).ffill()
+        df["liquidity_low_prev"] = pd.Series(np.where(df["swing_low"], df["low"], np.nan), index=df.index).ffill()
+
+        return df
+
+    def detect_fvg(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        # Candle 1 at t, candle 3 at t+2
+        c1_high = df["high"]
+        c1_low = df["low"]
+        c3_low = df["low"].shift(-2)
+        c3_high = df["high"].shift(-2)
+
+        df["bullish_fvg"] = (c3_low > c1_high) & ((c3_low - c1_high) > df["close"] * self.config.FVG_THRESHOLD)
+        df["bearish_fvg"] = (c3_high < c1_low) & ((c1_low - c3_high) > df["close"] * self.config.FVG_THRESHOLD)
+
+        return df
+
+    def calculate_premium_discount(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        window = max(1, int(self.config.ICT_RANGE_HOURS * 4))
+
+        df["range_high"] = df["high"].rolling(window=window, min_periods=window).max()
+        df["range_low"] = df["low"].rolling(window=window, min_periods=window).min()
+        df["range_mid"] = (df["range_high"] + df["range_low"]) / 2
+
+        df["premium"] = df["close"] > df["range_mid"]
+        df["discount"] = df["close"] < df["range_mid"]
+        df["equilibrium"] = df["range_mid"]
+
+        return df
+
+    def detect_ote(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        df["impulse_high"] = df["high"].rolling(window=20, min_periods=20).max()
+        df["impulse_low"] = df["low"].rolling(window=20, min_periods=20).min()
+        df["impulse_range"] = df["impulse_high"] - df["impulse_low"]
+
+        for level in self.config.OTE_LEVELS:
+            df[f"ote_long_{level}"] = df["impulse_high"] - (df["impulse_range"] * level)
+            df[f"ote_short_{level}"] = df["impulse_low"] + (df["impulse_range"] * level)
+
+        return df
+
+    def liquidity_sweep_detection(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+
+        df["bullish_sweep"] = (
+            df["liquidity_low_prev"].notna()
+            & (df["low"] < df["liquidity_low_prev"])
+            & (df["close"] > df["liquidity_low_prev"])
+            & (df["discount"])
+        )
+
+        df["bearish_sweep"] = (
+            df["liquidity_high_prev"].notna()
+            & (df["high"] > df["liquidity_high_prev"])
+            & (df["close"] < df["liquidity_high_prev"])
+            & (df["premium"])
+        )
+
+        return df
+
+    def generate_signal(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        df["signal"] = 0
+        df["signal_strength"] = 0.0
+        df["confluence_count_ict"] = 0
+        df["regime_gate_allowed"] = True
+        df["regime_gate_reason"] = "disabled"
+
+        long_condition = df["discount"] & (df["bullish_sweep"] | df["bullish_fvg"])
+        short_condition = df["premium"] & (df["bearish_sweep"] | df["bearish_fvg"])
+
+        df.loc[long_condition, "signal"] = 1
+        df.loc[short_condition, "signal"] = -1
+
+        # Vectorized strength (same scoring as previous row-wise implementation):
+        # sweep 30 + fvg 25 + (discount/premium) 25 + OTE(first configured level) 20, capped at 100.
+        #
+        # NOTE: The scoring weights are part of the model definition (not evolved genes).
+        # Genes control thresholds/geometry; strength is a deterministic composite.
+        sig = df["signal"].astype(int)
+        sweep = np.where((sig == 1) & df.get("bullish_sweep", False), 30, 0) + np.where(
+            (sig == -1) & df.get("bearish_sweep", False), 30, 0
+        )
+        fvg = np.where((sig == 1) & df.get("bullish_fvg", False), 25, 0) + np.where(
+            (sig == -1) & df.get("bearish_fvg", False), 25, 0
+        )
+        pd_ctx = np.where((sig == 1) & df.get("discount", False), 25, 0) + np.where(
+            (sig == -1) & df.get("premium", False), 25, 0
+        )
+        # Use first OTE level from config to avoid hardcoding 0.62.
+        ote_levels = list(getattr(self.config, "OTE_LEVELS", []) or [])
+        ote_key = str(ote_levels[0]) if ote_levels else "0.62"
+        ote_long = df.get(f"ote_long_{ote_key}")
+        ote_short = df.get(f"ote_short_{ote_key}")
+        ote = np.zeros(len(df), dtype=float)
+        ote_hit = np.zeros(len(df), dtype=bool)
+        sweep_hit = np.zeros(len(df), dtype=bool)
+        fvg_hit = np.zeros(len(df), dtype=bool)
+        pdctx_hit = np.zeros(len(df), dtype=bool)
+        if ote_long is not None:
+            hit = (sig == 1) & ote_long.notna() & (df["close"] > ote_long)
+            ote = ote + np.where(hit, 20, 0)
+            ote_hit = ote_hit | hit.to_numpy(dtype=bool, copy=False)
+        if ote_short is not None:
+            hit = (sig == -1) & ote_short.notna() & (df["close"] < ote_short)
+            ote = ote + np.where(hit, 20, 0)
+            ote_hit = ote_hit | hit.to_numpy(dtype=bool, copy=False)
+        df["ote_hit"] = ote_hit.astype(bool)
+
+        sweep_hit = (((sig == 1) & df.get("bullish_sweep", False)) | ((sig == -1) & df.get("bearish_sweep", False))).astype(bool)
+        fvg_hit = (((sig == 1) & df.get("bullish_fvg", False)) | ((sig == -1) & df.get("bearish_fvg", False))).astype(bool)
+        pdctx_hit = (((sig == 1) & df.get("discount", False)) | ((sig == -1) & df.get("premium", False))).astype(bool)
+        df["confluence_count_ict"] = (
+            sweep_hit.astype(int) + fvg_hit.astype(int) + pdctx_hit.astype(int) + df["ote_hit"].astype(int)
+        ).astype(int)
+
+        strength = sweep + fvg + pd_ctx + ote
+        df["signal_strength"] = np.where(sig != 0, np.minimum(strength, 100.0), 0.0).astype(float)
+
+        # Snapshot before optional regime gate (for backtest A/B: how many raw ICT bars were zeroed).
+        df["signal_pre_regime_gate"] = df["signal"].astype(int)
+
+        # Optional v1.9 regime gate. In ranging markets, require stricter strength+confluence.
+        gate_on = bool(getattr(self.config, "REGIME_GATE_ENABLED", False))
+        if gate_on and "regime_state" in df.columns:
+            range_strength_min = float(getattr(self.config, "REGIME_RANGE_MIN_SIGNAL_STRENGTH", 75))
+            range_conf_min = int(getattr(self.config, "REGIME_RANGE_MIN_CONFLUENCE", 3))
+            is_range = df["regime_state"].astype(str).eq("ranging")
+            base_sig = df["signal"].astype(int) != 0
+            strict_ok = (df["signal_strength"] >= range_strength_min) & (df["confluence_count_ict"] >= range_conf_min)
+            allow = (~base_sig) | (~is_range) | strict_ok
+            gated = df["signal"].where(allow, 0).astype(int)
+            removed = (df["signal"].astype(int) != 0) & (gated == 0)
+
+            df["signal"] = gated
+            df["regime_gate_allowed"] = allow.astype(bool)
+            df["regime_gate_reason"] = np.where(
+                ~base_sig,
+                "flat",
+                np.where(
+                    ~is_range,
+                    "trend_allowed",
+                    np.where(
+                        removed,
+                        "range_filtered_low_quality",
+                        "range_allowed_strict",
+                    ),
+                ),
+            )
+            df["regime_gate_removed"] = removed.astype(bool)
+        else:
+            df["regime_gate_allowed"] = True
+            df["regime_gate_reason"] = "disabled"
+            df["regime_gate_removed"] = False
+        return df
+
+    def _calculate_strength(self, row: pd.Series) -> float:
+        if row.get("signal", 0) == 0:
+            return 0.0
+
+        strength = 0.0
+
+        if row["signal"] == 1 and bool(row.get("bullish_sweep", False)):
+            strength += 30
+        elif row["signal"] == -1 and bool(row.get("bearish_sweep", False)):
+            strength += 30
+
+        if row["signal"] == 1 and bool(row.get("bullish_fvg", False)):
+            strength += 25
+        elif row["signal"] == -1 and bool(row.get("bearish_fvg", False)):
+            strength += 25
+
+        if row["signal"] == 1 and bool(row.get("discount", False)):
+            strength += 25
+        elif row["signal"] == -1 and bool(row.get("premium", False)):
+            strength += 25
+
+        ote_levels = list(getattr(self.config, "OTE_LEVELS", []) or [])
+        ote_key = str(ote_levels[0]) if ote_levels else "0.62"
+        ote_long = row.get(f"ote_long_{ote_key}", np.nan)
+        ote_short = row.get(f"ote_short_{ote_key}", np.nan)
+        if row["signal"] == 1 and pd.notna(ote_long) and float(row["close"]) > float(ote_long):
+            strength += 20
+        elif row["signal"] == -1 and pd.notna(ote_short) and float(row["close"]) < float(ote_short):
+            strength += 20
+
+        return float(min(strength, 100.0))
+
+    def process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = self.detect_liquidity_pools(df)
+        df = self.detect_fvg(df)
+        df = self.calculate_premium_discount(df)
+        df = self.detect_ote(df)
+        df = self.liquidity_sweep_detection(df)
+        df = annotate_regime(df, self.config)
+        df = self.generate_signal(df)
+        return df
+

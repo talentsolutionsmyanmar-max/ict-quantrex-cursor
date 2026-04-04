@@ -1,0 +1,97 @@
+# AutoResearchClaw — canonical strategy specification (v1)
+# Edit this file to change defaults; restart Flask to apply.
+# Secrets stay in .env only (API keys never here).
+
+spec_version: 1
+
+meta:
+  name: "AutoResearchClaw ICT Core"
+  description: "Deterministic ICT pipeline — single source of truth for research/paper"
+  # Dashboard Research lab: walk-forward OOS, crisis stress, evolve — mutates genes listed in research_lab.GENE_SPACE (restart after manual YAML edits).
+
+# Version 1.8 - Baseline locked (do not change unless evolved) - Multi-coin robustness promote (SOL/ETH/BTC 1h)
+
+market:
+  symbol: "BTCUSDT"
+  timeframe: "15m"
+  binance_spot_base_url: "https://api.binance.com/api/v3"
+  # Paper trading polls each symbol below (capital split evenly). Backtest still uses `symbol` unless you change it in the UI.
+  watchlist:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "BNBUSDT"
+    - "SOLUSDT"
+    - "XRPUSDT"
+    - "DOGEUSDT"
+    - "ADAUSDT"
+    - "AVAXUSDT"
+    - "LINKUSDT"
+    - "DOTUSDT"
+
+ict:
+  range_hours: 5
+  liquidity_buffer: 0.006
+  fvg_threshold: 0.001
+  ote_levels: [0.62, 0.705, 0.79]
+
+risk:
+  initial_capital: 10000
+  risk_per_trade: 0.01
+  atr_multiplier: 1.8
+  min_confluence: 2
+  min_signal_strength: 68
+  max_daily_loss: 0.03
+  max_drawdown: 0.10
+  max_position_notional_usd: 50000
+
+execution:
+  tp1_ratio: 1.0
+  tp2_ratio: 2.0
+  tp3_ratio: 3.0
+  tp1_pct: 0.5
+  tp2_pct: 0.3
+  tp3_pct: 0.2
+  trail_after_tp1: true
+  trail_atr_multiplier: 1.0
+  max_candles_hold: 48
+
+backtest:
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+  commission: 0.001
+  slippage: 0.0005
+
+operations:
+  poll_interval_sec: 15
+  mode: "BACKTEST"
+
+regime:
+  enabled: false
+  adx_period: 14
+  adx_min: 18
+  atr_period: 14
+  atr_pct_min: 0.35
+  ema_fast: 20
+  ema_slow: 50
+  persist_bars: 3
+  range_min_signal_strength: 75
+  range_min_confluence: 3
+
+# ICT-style session filters (UTC clock, daily recurring, no cross-midnight windows in v1)
+sessions:
+  clock: "UTC"
+  kill_zones:
+    - name: "Asian"
+      utc_start: "00:00"
+      utc_end: "04:00"
+    - name: "London"
+      utc_start: "07:00"
+      utc_end: "11:00"
+    - name: "New York"
+      utc_start: "13:00"
+      utc_end: "17:00"
+
+# Future: OMS / live gates (paper ignores strict live flags until wired)
+gates:
+  require_kill_zone_for_live: false
+  kill_switch: false

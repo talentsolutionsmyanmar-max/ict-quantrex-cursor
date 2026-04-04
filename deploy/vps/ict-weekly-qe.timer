@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ICT Chief QE sweep weekly (Sunday 02:00 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

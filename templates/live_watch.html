@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live watch — AutoResearchClaw</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+      :root {
+        --bg: #0c0f14;
+        --panel: rgba(18, 24, 33, 0.95);
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #e8eaef;
+        --muted: #8b93a7;
+        --accent: #f59e0b;
+        --cyan: #22d3ee;
+        --green: #34d399;
+        --red: #f87171;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "DM Sans", system-ui, sans-serif;
+        background: var(--bg);
+        background-image: radial-gradient(ellipse 100% 60% at 50% -10%, rgba(34, 211, 238, 0.08), transparent);
+        color: var(--text);
+      }
+      body.socket-live header {
+        box-shadow: 0 0 24px rgba(52, 211, 153, 0.12);
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .wrap {
+        max-width: min(1680px, 100%);
+        margin: 0 auto;
+        padding: 1rem 1.25rem 2rem;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1.25rem;
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #fde68a, var(--accent));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .sub {
+        margin: 0.2rem 0 0;
+        font-size: 0.72rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      a {
+        color: var(--cyan);
+      }
+      .btn {
+        font-family: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+      }
+      .btn-ghost {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, #d97706, var(--accent));
+        color: #0c0f14;
+      }
+      .btn-danger {
+        background: linear-gradient(135deg, #b91c1c, #ef4444);
+        color: #fff;
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .banner {
+        padding: 0.85rem 1rem;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        margin-bottom: 1rem;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .banner.live-on {
+        border-color: rgba(52, 211, 153, 0.35);
+        color: #a7f3d0;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 1rem 1.15rem;
+        margin-bottom: 1rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.78rem;
+      }
+      th {
+        text-align: left;
+        color: var(--muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.65rem;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      tr[data-sym]:hover {
+        background: rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+      }
+      tr.selected {
+        background: rgba(34, 211, 238, 0.08);
+      }
+      tr.flash {
+        animation: rowflash 0.35s ease;
+      }
+      @keyframes rowflash {
+        from {
+          background: rgba(245, 158, 11, 0.2);
+        }
+        to {
+          background: transparent;
+        }
+      }
+      .long {
+        color: var(--green);
+        font-weight: 600;
+      }
+      .short {
+        color: var(--red);
+        font-weight: 600;
+      }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.75rem;
+      }
+      .detail-grid div span:first-child {
+        display: block;
+        font-size: 0.62rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        margin-bottom: 0.15rem;
+      }
+      .detail-grid .big {
+        font-size: 1.35rem;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>Live watch</h1>
+          <p class="sub">Live all · full watchlist grid · same Socket.IO feed as dashboard</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center">
+          <span id="live-badge" class="mono" style="font-size: 0.75rem; color: var(--muted)">Checking…</span>
+          <button type="button" id="btn-start" class="btn btn-primary">Start paper</button>
+          <button type="button" id="btn-stop" class="btn btn-danger hidden">Stop paper</button>
+          <a href="/" class="btn btn-ghost" style="text-decoration: none; display: inline-block">← Dashboard</a>
+        </div>
+      </header>
+
+      <div id="banner" class="banner">
+        Paper trading is <strong>off</strong>. Click <strong>Start paper</strong> (or start from the main dashboard) to stream Binance klines for
+        <strong>every</strong> symbol in <span class="mono">market.watchlist</span> — live all rows update each poll.
+      </div>
+
+      <div class="panel">
+        <h2 style="margin: 0 0 0.75rem; font-size: 0.9rem">Watchlist grid</h2>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Bias</th>
+                <th>Strength</th>
+                <th>Conf</th>
+                <th>Position</th>
+                <th>Bar (UTC)</th>
+              </tr>
+            </thead>
+            <tbody id="grid-body">
+              <tr>
+                <td colspan="7" style="color: var(--muted); padding: 1.5rem; text-align: center">No data yet — start paper or wait for first tick.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 style="margin: 0 0 0.75rem; font-size: 0.9rem">Focus <span id="focus-name" class="mono" style="color: var(--cyan)">—</span></h2>
+        <p id="focus-hint" style="margin: 0 0 1rem; font-size: 0.8rem; color: var(--muted)">Click a row to lock focus (defaults to first open position, else first symbol).</p>
+        <div id="detail" class="detail-grid">
+          <div><span>Price</span><span id="d-price" class="mono big">—</span></div>
+          <div><span>Signal</span><span id="d-sig" class="mono big">—</span></div>
+          <div><span>Strength</span><span id="d-str" class="mono">—</span></div>
+          <div><span>Confluence</span><span id="d-conf" class="mono">—</span></div>
+          <div><span>Unrealized</span><span id="d-unreal" class="mono">—</span></div>
+          <div><span>Entry / SL</span><span id="d-sl" class="mono" style="font-size: 0.8rem">—</span></div>
+          <div><span>TP1–3</span><span id="d-tp" class="mono" style="font-size: 0.75rem">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let selectedSymbol = null;
+      let lastPer = null;
+
+      function pickFocus(per) {
+        const keys = Object.keys(per || {});
+        if (!keys.length) return null;
+        if (selectedSymbol && per[selectedSymbol]) return selectedSymbol;
+        for (const k of keys) {
+          if (Number(per[k].position || 0) !== 0) return k;
+        }
+        return keys[0];
+      }
+
+      function sigLabel(p) {
+        const pos = Number(p.position || 0);
+        if (pos === 1) return "IN LONG";
+        if (pos === -1) return "IN SHORT";
+        const s = Number(p.signal || 0);
+        if (s === 1) return "LONG";
+        if (s === -1) return "SHORT";
+        return "NEUTRAL";
+      }
+
+      function renderDetail(p) {
+        if (!p) return;
+        document.getElementById("focus-name").textContent = p.symbol || "—";
+        document.getElementById("d-price").textContent = p.price != null ? "$" + Number(p.price).toFixed(p.price >= 100 ? 2 : 4) : "—";
+        const sl = sigLabel(p);
+        const el = document.getElementById("d-sig");
+        el.textContent = sl;
+        el.className =
+          "mono big " + (sl.includes("LONG") ? "long" : sl.includes("SHORT") ? "short" : "");
+        document.getElementById("d-str").textContent = p.signal_strength != null ? Number(p.signal_strength).toFixed(0) + "%" : "—";
+        document.getElementById("d-conf").textContent = p.confluence != null ? String(p.confluence) : "—";
+        const u = p.unrealized_pnl;
+        const ue = document.getElementById("d-unreal");
+        if (u != null && Number(p.position) !== 0) {
+          ue.textContent = (u >= 0 ? "+" : "") + "$" + Number(u).toFixed(2);
+          ue.style.color = u >= 0 ? "var(--green)" : "var(--red)";
+        } else {
+          ue.textContent = "—";
+          ue.style.color = "";
+        }
+        if (p.entry_price != null && p.stop_loss != null) {
+          document.getElementById("d-sl").textContent =
+            "$" + Number(p.entry_price).toFixed(2) + " / $" + Number(p.stop_loss).toFixed(2);
+        } else document.getElementById("d-sl").textContent = "—";
+        if (p.tp1 != null) {
+          document.getElementById("d-tp").textContent =
+            [p.tp1, p.tp2, p.tp3].map((x) => "$" + Number(x).toFixed(2)).join(" · ");
+        } else document.getElementById("d-tp").textContent = "—";
+      }
+
+      function renderTable(per, watchlist) {
+        const tbody = document.getElementById("grid-body");
+        const keys = watchlist && watchlist.length ? watchlist : Object.keys(per);
+        if (!keys.length) return;
+        tbody.innerHTML = keys
+          .map((sym) => {
+            const p = per[sym] || {};
+            const pos = Number(p.position || 0);
+            const bias = sigLabel(p);
+            const cls = bias.includes("LONG") ? "long" : bias.includes("SHORT") && bias !== "NEUTRAL" ? "short" : "";
+            const ts = (p.timestamp || "").slice(0, 19).replace("T", " ") || "—";
+            return (
+              "<tr data-sym=\"" +
+              sym +
+              "\" class=\"" +
+              (selectedSymbol === sym ? "selected" : "") +
+              "\"><td class=\"mono\">" +
+              sym +
+              "</td><td class=\"mono\">" +
+              (p.price != null ? "$" + Number(p.price).toFixed(4) : "—") +
+              "</td><td class=\"" +
+              cls +
+              "\">" +
+              bias +
+              "</td><td class=\"mono\">" +
+              (p.signal_strength != null ? Number(p.signal_strength).toFixed(0) + "%" : "—") +
+              "</td><td class=\"mono\">" +
+              (p.confluence != null ? p.confluence : "—") +
+              "</td><td class=\"mono\">" +
+              (pos === 0 ? "—" : pos === 1 ? "LONG" : "SHORT") +
+              "</td><td class=\"mono\" style=\"font-size:0.72rem\">" +
+              ts +
+              "</td></tr>"
+            );
+          })
+          .join("");
+        tbody.querySelectorAll("tr[data-sym]").forEach((row) => {
+          row.addEventListener("click", () => {
+            selectedSymbol = row.getAttribute("data-sym");
+            tbody.querySelectorAll("tr").forEach((r) => r.classList.remove("selected"));
+            row.classList.add("selected");
+            if (lastPer && lastPer[selectedSymbol]) renderDetail(lastPer[selectedSymbol]);
+          });
+        });
+      }
+
+      function onLiveData(data) {
+        if (!data || !data.per_symbol) return;
+        lastPer = data.per_symbol;
+        const wl = data.watchlist || Object.keys(data.per_symbol);
+        renderTable(data.per_symbol, wl);
+        const focus = pickFocus(data.per_symbol);
+        if (focus && data.per_symbol[focus]) {
+          if (!selectedSymbol || !data.per_symbol[selectedSymbol]) selectedSymbol = null;
+          const show = selectedSymbol && data.per_symbol[selectedSymbol] ? selectedSymbol : focus;
+          renderDetail(data.per_symbol[show]);
+          const row = document.querySelector("tr[data-sym=\"" + show + "\"]");
+          if (row) {
+            row.classList.add("flash");
+            setTimeout(() => row.classList.remove("flash"), 400);
+          }
+        }
+      }
+
+      async function refreshStatus() {
+        try {
+          const r = await fetch("/api/status");
+          const j = await r.json();
+          const on = j.is_running && j.mode === "PAPER";
+          document.getElementById("live-badge").textContent = on ? "● Paper LIVE" : "○ Paper off";
+          document.getElementById("live-badge").style.color = on ? "var(--green)" : "var(--muted)";
+          document.getElementById("btn-start").classList.toggle("hidden", on);
+          document.getElementById("btn-stop").classList.toggle("hidden", !on);
+          const b = document.getElementById("banner");
+          if (on) {
+            b.classList.add("live-on");
+            b.innerHTML = "<strong>Streaming</strong> — table updates every poll interval from Binance. Open positions show in <strong>Position</strong>.";
+          } else {
+            b.classList.remove("live-on");
+            b.innerHTML =
+              "Paper trading is <strong>off</strong>. Click <strong>Start paper</strong> (or start from the main dashboard) to stream Binance klines for every symbol in <span class=\"mono\">market.watchlist</span>.";
+          }
+        } catch (e) {
+          document.getElementById("live-badge").textContent = "Status error";
+        }
+      }
+
+      document.getElementById("btn-start").addEventListener("click", async () => {
+        const btn = document.getElementById("btn-start");
+        btn.disabled = true;
+        try {
+          const r = await fetch("/api/paper/start", { method: "POST" });
+          const j = await r.json();
+          if (!j.success) alert(j.error || "Could not start");
+          await refreshStatus();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+      document.getElementById("btn-stop").addEventListener("click", async () => {
+        await fetch("/api/paper/stop", { method: "POST" });
+        await refreshStatus();
+      });
+
+      const socket = io({ transports: ["websocket", "polling"] });
+      socket.on("live_data", onLiveData);
+      socket.on("connect", () => {
+        console.log("socket ok");
+        const b = document.getElementById("live-badge");
+        if (b) {
+          b.textContent = "Socket connected — waiting for paper stream";
+          b.style.color = "var(--green)";
+        }
+        document.body.classList.add("socket-live");
+      });
+      socket.on("disconnect", () => {
+        const b = document.getElementById("live-badge");
+        if (b) {
+          b.textContent = "Socket disconnected — check network / server";
+          b.style.color = "var(--red)";
+        }
+        document.body.classList.remove("socket-live");
+      });
+
+      refreshStatus();
+      setInterval(refreshStatus, 4000);
+
+      fetch("/api/config/runtime")
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.success && j.watchlist && j.watchlist.length) {
+            document.getElementById("focus-hint").textContent =
+              "Watching " + j.watchlist.length + " symbols: " + j.watchlist.join(", ") + ". Click a row to lock focus.";
+          }
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

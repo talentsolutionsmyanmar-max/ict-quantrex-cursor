@@ -1,0 +1,20 @@
+[Unit]
+Description=ICT Trading Dashboard (Flask-SocketIO / ResearchClaw)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace user and paths to match your droplet (see DEPLOY_CHECKLIST.md).
+User=trader
+WorkingDirectory=/home/trader/ict-trading-dashboard
+Environment=PATH=/home/trader/ict-trading-dashboard/venv/bin:/usr/bin:/bin
+Environment=FLASK_DEBUG=0
+Environment=PORT=5050
+EnvironmentFile=-/home/trader/ict-trading-dashboard/.env
+ExecStart=/home/trader/ict-trading-dashboard/venv/bin/python /home/trader/ict-trading-dashboard/app.py
+Restart=always
+RestartSec=8
+
+[Install]
+WantedBy=multi-user.target

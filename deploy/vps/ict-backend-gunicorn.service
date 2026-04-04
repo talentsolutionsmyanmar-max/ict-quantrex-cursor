@@ -1,0 +1,23 @@
+[Unit]
+Description=ICT Backend (Gunicorn + Eventlet, Socket.IO)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trader
+WorkingDirectory=/home/trader/ict-backend
+Environment=PATH=/home/trader/ict-backend/venv/bin:/usr/bin:/bin
+Environment=FLASK_DEBUG=0
+Environment=PORT=5050
+Environment=SOCKETIO_ASYNC_MODE=eventlet
+Environment=TRUST_PROXY=1
+EnvironmentFile=-/home/trader/ict-backend/.env
+# Bind to localhost only; Caddy terminates TLS on 80/443.
+ExecStart=/home/trader/ict-backend/venv/bin/gunicorn --worker-class eventlet -w 1 --bind 127.0.0.1:5050 --access-logfile - --error-logfile - wsgi:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

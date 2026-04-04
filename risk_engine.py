@@ -1,0 +1,46 @@
+"""
+Pre-trade risk gate (Phase A stub — expand for live OMS).
+Paper mode: permissive. Live: enforce caps from spec + env.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Tuple
+
+from strategy.load_spec import get_gates, read_raw_spec
+
+
+class RiskEngine:
+    def __init__(self, config: Any):
+        self.config = config
+
+    def check_kill_switch(self) -> Tuple[bool, str]:
+        gates = get_gates()
+        if gates.get("kill_switch"):
+            return False, "Kill switch ON (strategy/spec.yaml gates.kill_switch)"
+        return True, "ok"
+
+    def allow_new_risk(
+        self,
+        *,
+        mode: str,
+        symbol: str,
+        estimated_notional_usd: float = 0.0,
+    ) -> Tuple[bool, List[str]]:
+        reasons: List[str] = []
+        ok, msg = self.check_kill_switch()
+        if not ok:
+            return False, [msg]
+
+        raw = read_raw_spec()
+        risk = raw.get("risk") or {}
+        max_notional = float(risk.get("max_position_notional_usd") or 1e12)
+
+        if mode.upper() == "LIVE":
+            if not getattr(self.config, "BINANCE_API_KEY", ""):
+                return False, ["LIVE blocked: no BINANCE_API_KEY"]
+            if estimated_notional_usd > max_notional:
+                return False, [f"Notional {estimated_notional_usd} exceeds max_position_notional_usd {max_notional}"]
+
+        reasons.append("pre_trade_ok")
+        return True, reasons

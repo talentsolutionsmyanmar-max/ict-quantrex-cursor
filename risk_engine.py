@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
+from market_gates import evaluate_entry_gates
 from strategy.load_spec import get_gates, read_raw_spec
 
 
@@ -57,3 +58,9 @@ class RiskEngine:
 
         reasons.append("pre_trade_ok")
         return True, reasons
+
+    def check_entry_gates(self, symbol: str) -> Tuple[bool, List[str]]:
+        """Per-symbol spot liquidity, futures funding, BTC correlation (spec gates.*)."""
+        raw = read_raw_spec()
+        gates = get_gates()
+        return evaluate_entry_gates(symbol=symbol, gates=gates, config=self.config, raw_spec=raw)

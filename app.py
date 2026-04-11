@@ -5,6 +5,7 @@ import threading
 
 from backtester import Backtester
 from paper_trader import PaperTrader
+from paper_alerts import send_telegram_sync
 from config import build_config
 from regime import detect_regime
 from run_store import insert_run, list_runs, get_run
@@ -72,6 +73,41 @@ trading_state = {
 config = build_config()
 paper_trader = None
 risk_engine = RiskEngine(config)
+
+
+def start_paper_trading_internal():
+    """Start the paper loop (used by /api/paper/start and optional VPS autostart)."""
+    global paper_trader
+    if trading_state["is_running"]:
+        return False, "Already running", None
+    allow, reasons = risk_engine.allow_new_risk(mode="PAPER", symbol=config.SYMBOL)
+    if not allow:
+        return False, reasons[0] if reasons else "Risk gate blocked", 403
+    paper_trader = PaperTrader(config, socketio)
+    trading_state["is_running"] = True
+    trading_state["mode"] = "PAPER"
+    thread = threading.Thread(target=paper_trader.run, daemon=True)
+    thread.start()
+    return True, None, None
+
+
+def start_background_services():
+    """Run once per process: KZ autoresearch poller + optional paper autostart (Gunicorn or dev server)."""
+    if getattr(start_background_services, "_done", False):
+        return
+    start_background_services._done = True
+
+    _kz = os.getenv("KZ_AUTO_RESEARCH", "").strip().lower()
+    if _kz in ("1", "true", "yes", "on"):
+        start_background_poller(lambda: config, interval_sec=float(os.getenv("KZ_POLL_INTERVAL_SEC", "60")))
+
+    _auto = os.getenv("PAPER_TRADING_AUTOSTART", "").strip().lower()
+    if _auto in ("1", "true", "yes", "on"):
+        ok, err, _status = start_paper_trading_internal()
+        if ok:
+            print("PAPER_TRADING_AUTOSTART: paper trading loop started")
+        else:
+            print(f"PAPER_TRADING_AUTOSTART: not started ({err})")
 
 
 @app.route("/")
@@ -186,22 +222,12 @@ def run_backtest():
 @app.route("/api/paper/start", methods=["POST"])
 def start_paper_trading():
     """Start paper trading"""
-    global paper_trader
-
-    if trading_state["is_running"]:
-        return jsonify({"success": False, "error": "Already running"})
-
-    allow, reasons = risk_engine.allow_new_risk(mode="PAPER", symbol=config.SYMBOL)
-    if not allow:
-        return jsonify({"success": False, "error": reasons[0] if reasons else "Risk gate blocked"}), 403
-
-    paper_trader = PaperTrader(config, socketio)
-    trading_state["is_running"] = True
-    trading_state["mode"] = "PAPER"
-
-    thread = threading.Thread(target=paper_trader.run, daemon=True)
-    thread.start()
-
+    ok, err, status = start_paper_trading_internal()
+    if not ok:
+        payload = {"success": False, "error": err}
+        if status:
+            return jsonify(payload), status
+        return jsonify(payload)
     return jsonify({"success": True, "message": "Paper trading started"})
 
 
@@ -250,6 +276,47 @@ def api_health():
     return jsonify({"success": True, **snap})
 
 
+@app.route("/api/alerts/status")
+def api_alerts_status():
+    """Whether Telegram / webhook env vars are set (no secrets returned)."""
+    return jsonify(
+        {
+            "success": True,
+            "telegram_configured": bool(
+                os.getenv("TELEGRAM_BOT_TOKEN", "").strip() and os.getenv("TELEGRAM_CHAT_ID", "").strip()
+            ),
+            "webhook_configured": bool(os.getenv("ALERT_WEBHOOK_URL", "").strip()),
+        }
+    )
+
+
+@app.route("/api/alerts/test-telegram", methods=["POST"])
+def api_alerts_test_telegram():
+    """
+    Send one test message via Telegram Bot API.
+    Set TELEGRAM_TEST_SECRET in .env, then POST with header X-Telegram-Test-Secret: <secret>
+    or JSON {"secret": "<secret>"}.
+    """
+    expected = os.getenv("TELEGRAM_TEST_SECRET", "").strip()
+    if not expected:
+        return jsonify(
+            {
+                "success": False,
+                "error": "Set TELEGRAM_TEST_SECRET in .env to enable this endpoint, or run: python3 scripts/test_telegram.py",
+            }
+        ), 503
+    got = request.headers.get("X-Telegram-Test-Secret", "").strip()
+    if not got:
+        payload = request.get_json(silent=True) or {}
+        got = str(payload.get("secret", "")).strip()
+    if got != expected:
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+    ok, err = send_telegram_sync("ICT Quantrex: Telegram test from API — alerts channel OK.")
+    if ok:
+        return jsonify({"success": True, "message": "Test message sent to Telegram"})
+    return jsonify({"success": False, "error": err}), 502
+
+
 @app.route("/api/session")
 def api_session():
     return jsonify({"success": True, "session": get_session_state()})
@@ -263,8 +330,15 @@ def api_strategy_spec():
 @app.route("/api/risk-check")
 def api_risk_check():
     mode = request.args.get("mode", "PAPER").upper()
-    ok, reasons = risk_engine.allow_new_risk(mode=mode, symbol=config.SYMBOL)
-    return jsonify({"success": True, "allow": ok, "reasons": reasons})
+    sym = request.args.get("symbol", config.SYMBOL)
+    sym = str(sym).upper().replace("/", "")
+    ok, reasons = risk_engine.allow_new_risk(mode=mode, symbol=sym)
+    out = {"success": True, "allow": ok, "reasons": reasons, "symbol": sym}
+    if request.args.get("market_gates", "").lower() in ("1", "true", "yes"):
+        g_ok, g_reasons = risk_engine.check_entry_gates(sym)
+        out["market_gates_allow"] = g_ok
+        out["market_gates_reasons"] = g_reasons
+    return jsonify(out)
 
 
 @app.route("/api/playbook")
@@ -914,9 +988,7 @@ if __name__ == "__main__":
     # Default 5050: macOS often binds 5000 to AirPlay Receiver (System Settings → General → AirDrop & Handoff).
     port = int(os.getenv("PORT", "5050"))
     print(f"AutoResearchClaw: http://127.0.0.1:{port}/  (set PORT= to override)")
-    _kz = os.getenv("KZ_AUTO_RESEARCH", "").strip().lower()
-    if _kz in ("1", "true", "yes", "on"):
-        start_background_poller(lambda: config, interval_sec=float(os.getenv("KZ_POLL_INTERVAL_SEC", "60")))
+    start_background_services()
     _debug = os.getenv("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
     socketio.run(app, host="0.0.0.0", port=port, debug=_debug, allow_unsafe_werkzeug=True)
 

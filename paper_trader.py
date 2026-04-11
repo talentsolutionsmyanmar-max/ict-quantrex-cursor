@@ -23,6 +23,7 @@ from ict_execution import (
 from playbook_reason import entry_context_json_str, entry_snapshot, exit_narrative
 from trade_playbook import record_playbook_event
 from paper_alerts import notify_paper_exit, notify_paper_open
+from risk_engine import RiskEngine
 from strategy.load_spec import read_raw_spec
 
 
@@ -76,6 +77,7 @@ class PaperTrader:
         slice_cap = float(config.INITIAL_CAPITAL) / n
         self.books: Dict[str, SymbolPaperBook] = {s: SymbolPaperBook(symbol=s, capital=slice_cap) for s in self.symbols}
         self.trades: list = []
+        self.risk = RiskEngine(config)
 
     def _dirty_execution_enabled(self) -> bool:
         raw = read_raw_spec()
@@ -222,6 +224,10 @@ class PaperTrader:
             if c >= int(self.config.MIN_CONFLUENCE) and float(row.get("signal_strength", 0)) >= float(
                 self.config.MIN_SIGNAL_STRENGTH
             ):
+                gate_ok, gate_msgs = self.risk.check_entry_gates(book.symbol)
+                if not gate_ok:
+                    print(f"Entry blocked | {book.symbol} | {'; '.join(gate_msgs)}")
+                    return
                 book.position = int(row["signal"])
                 book.last_confluence_at_entry = float(row.get("signal_strength", 0) or 0.0)
                 raw = read_raw_spec()

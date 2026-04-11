@@ -94,6 +94,8 @@ class Config:
     # API Keys (for paper/live)
     BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
     BINANCE_SECRET = os.getenv("BINANCE_SECRET", "")
+    # USDT-M futures public API (funding / premiumIndex only; no keys required)
+    BINANCE_FUTURES_API = os.getenv("BINANCE_FUTURES_API", "https://fapi.binance.com/fapi/v1")
 
     # Unusual Whales (US equities / options flow — optional; see unusual_whales_client.py)
     UNUSUAL_WHALES_API_KEY = os.getenv("UNUSUAL_WHALES_API_KEY", "")

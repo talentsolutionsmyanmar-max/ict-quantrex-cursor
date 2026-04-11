@@ -124,6 +124,9 @@ gates:
   min_liquidity_usd: 5000000
   max_funding_rate: 0.0005
   correlation_cap_btc: 0.85
+  # Optional tuning for market_gates.py (Binance public API, TTL cache)
+  market_gate_cache_ttl_sec: 60
+  correlation_klines_limit: 200
 
 walk_forward:
   enabled: true

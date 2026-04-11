@@ -1,16 +1,27 @@
 """
 Load strategy/spec.yaml and apply to a Config instance.
 Maps nested YAML sections to Config attributes (institution-style single spec).
+v2: STRATEGY_SPEC_PATH overrides file; nested ict.fvg / market.allocation / liquidity wired.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-_SPEC_PATH = Path(__file__).resolve().parent / "spec.yaml"
+_STRATEGY_DIR = Path(__file__).resolve().parent
+
+
+def get_spec_path() -> Path:
+    override = os.environ.get("STRATEGY_SPEC_PATH", "").strip()
+    if override:
+        p = Path(override)
+        return p if p.is_absolute() else _STRATEGY_DIR / p
+    return _STRATEGY_DIR / "spec.yaml"
+
 
 # (section, yaml_key) -> Config attribute name
 _MAP: Dict[Tuple[str, str], str] = {
@@ -38,12 +49,14 @@ _MAP: Dict[Tuple[str, str], str] = {
     ("execution", "trail_after_tp1"): "TRAIL_AFTER_TP1",
     ("execution", "trail_atr_multiplier"): "TRAIL_ATR_MULTIPLIER",
     ("execution", "max_candles_hold"): "MAX_CANDLES_HOLD",
+    ("execution", "model_partial_fills"): "MODEL_PARTIAL_FILLS",
     ("backtest", "start_date"): "BACKTEST_START_DATE",
     ("backtest", "end_date"): "BACKTEST_END_DATE",
     ("backtest", "commission"): "COMMISSION",
     ("backtest", "slippage"): "SLIPPAGE",
     ("operations", "poll_interval_sec"): "POLL_INTERVAL_SEC",
     ("operations", "mode"): "MODE",
+    ("operations", "log_every_fill"): "LOG_EVERY_FILL",
     ("regime", "enabled"): "REGIME_GATE_ENABLED",
     ("regime", "adx_period"): "REGIME_ADX_PERIOD",
     ("regime", "adx_min"): "REGIME_ADX_MIN",
@@ -58,12 +71,50 @@ _MAP: Dict[Tuple[str, str], str] = {
 
 
 def read_raw_spec(path: Optional[Path] = None) -> Dict[str, Any]:
-    p = path or _SPEC_PATH
+    p = path or get_spec_path()
     if not p.is_file():
         return {}
     with open(p, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return data if isinstance(data, dict) else {}
+
+
+def _apply_v2_nested(cfg: Any, raw: Dict[str, Any]) -> None:
+    market = raw.get("market")
+    if isinstance(market, dict):
+        alloc = market.get("allocation")
+        if isinstance(alloc, dict) and hasattr(cfg, "ALLOCATION_METHOD"):
+            mth = alloc.get("method")
+            if mth is not None:
+                cfg.ALLOCATION_METHOD = str(mth)
+            if "max_concurrent_positions" in alloc and hasattr(cfg, "MAX_CONCURRENT_POSITIONS"):
+                v = alloc.get("max_concurrent_positions")
+                cfg.MAX_CONCURRENT_POSITIONS = int(v) if v is not None else None
+            if "correlation_cap" in alloc and hasattr(cfg, "CORRELATION_CAP"):
+                cfg.CORRELATION_CAP = float(alloc.get("correlation_cap", 0.7))
+            if "correlation_reduce_threshold" in alloc and hasattr(cfg, "CORRELATION_REDUCE_THRESHOLD"):
+                cfg.CORRELATION_REDUCE_THRESHOLD = float(alloc.get("correlation_reduce_threshold", 0.85))
+
+    ict = raw.get("ict")
+    if isinstance(ict, dict):
+        fvg = ict.get("fvg")
+        if isinstance(fvg, dict):
+            if hasattr(cfg, "FVG_METHOD") and fvg.get("method") is not None:
+                cfg.FVG_METHOD = str(fvg.get("method", "static")).lower()
+            if hasattr(cfg, "FVG_MIN_GAP_ATR") and fvg.get("min_gap_atr") is not None:
+                cfg.FVG_MIN_GAP_ATR = float(fvg.get("min_gap_atr", 0.3))
+            if hasattr(cfg, "FVG_CONFIRMATION_CANDLES") and fvg.get("confirmation_candles") is not None:
+                cfg.FVG_CONFIRMATION_CANDLES = int(fvg.get("confirmation_candles", 0))
+            if hasattr(cfg, "FVG_MITIGATION_FILTER") and fvg.get("mitigation_filter") is not None:
+                cfg.FVG_MITIGATION_FILTER = bool(fvg.get("mitigation_filter"))
+            if hasattr(cfg, "FVG_IGNORE_MITIGATED") and fvg.get("ignore_mitigated") is not None:
+                cfg.FVG_IGNORE_MITIGATED = bool(fvg.get("ignore_mitigated"))
+
+        liq = ict.get("liquidity")
+        if isinstance(liq, dict) and hasattr(cfg, "SWEEP_VOLUME_SPIKE_FACTOR"):
+            vsf = liq.get("volume_spike_factor")
+            if vsf is not None:
+                cfg.SWEEP_VOLUME_SPIKE_FACTOR = float(vsf)
 
 
 def get_spec_meta(path: Optional[Path] = None) -> Dict[str, Any]:
@@ -111,21 +162,35 @@ def apply_spec_to_config(cfg: Any, path: Optional[Path] = None) -> None:
             clean = [str(x).upper().replace("/", "") for x in wl if x]
             cfg.WATCHLIST = clean if clean else None
 
+    _apply_v2_nested(cfg, raw)
+
+
+_PUBLIC_KEYS = (
+    "spec_version",
+    "meta",
+    "market",
+    "ict",
+    "risk",
+    "execution",
+    "backtest",
+    "operations",
+    "regime",
+    "sessions",
+    "gates",
+    "walk_forward",
+    "dirty_execution",
+    "stress_tests",
+    "observability",
+    "evolution",
+    "validation",
+)
+
 
 def public_spec_dict(path: Optional[Path] = None) -> Dict[str, Any]:
     """Safe for API: no secrets."""
     raw = read_raw_spec(path)
-    out = {
-        "spec_version": raw.get("spec_version"),
-        "meta": raw.get("meta"),
-        "market": raw.get("market"),
-        "ict": raw.get("ict"),
-        "risk": raw.get("risk"),
-        "execution": raw.get("execution"),
-        "backtest": raw.get("backtest"),
-        "operations": raw.get("operations"),
-        "regime": raw.get("regime"),
-        "sessions": raw.get("sessions"),
-        "gates": raw.get("gates"),
-    }
-    return {k: v for k, v in out.items() if v is not None}
+    out: Dict[str, Any] = {}
+    for k in _PUBLIC_KEYS:
+        if k in raw and raw[k] is not None:
+            out[k] = raw[k]
+    return out

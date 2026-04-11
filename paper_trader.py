@@ -7,7 +7,8 @@ import pandas as pd
 
 from config import Config
 from data_handler import DataHandler
-from ict_engine import ICTEngine
+from execution.dirty_fill_simulator import DirtyFillSimulator, FillResult, neutral_fill
+from ict_engine import ICTEngine, _wilder_atr_series
 from ict_execution import (
     atr_at_index,
     check_sl_hit,
@@ -21,6 +22,8 @@ from ict_execution import (
 )
 from playbook_reason import entry_context_json_str, entry_snapshot, exit_narrative
 from trade_playbook import record_playbook_event
+from paper_alerts import notify_paper_exit, notify_paper_open
+from strategy.load_spec import read_raw_spec
 
 
 def _paper_symbols(config: Config) -> List[str]:
@@ -52,6 +55,8 @@ class SymbolPaperBook:
     trades: list = field(default_factory=list)
     entry_reason_json: Optional[str] = None
     entry_reason_text: Optional[str] = None
+    last_fill: Optional[FillResult] = None
+    last_confluence_at_entry: float = 0.0
 
 
 class PaperTrader:
@@ -72,10 +77,15 @@ class PaperTrader:
         self.books: Dict[str, SymbolPaperBook] = {s: SymbolPaperBook(symbol=s, capital=slice_cap) for s in self.symbols}
         self.trades: list = []
 
+    def _dirty_execution_enabled(self) -> bool:
+        raw = read_raw_spec()
+        de = raw.get("dirty_execution") or {}
+        return bool(de.get("enabled")) and str(getattr(self.config, "MODE", "")).upper() == "PAPER"
+
     def run(self):
         self.running = True
         print(
-            f"📄 Paper trading — {len(self.symbols)} symbol(s): {', '.join(self.symbols)} "
+            f"Paper trading — {len(self.symbols)} symbol(s): {', '.join(self.symbols)} "
             f"(~${self.books[self.symbols[0]].capital:,.0f} each)"
         )
 
@@ -102,6 +112,9 @@ class PaperTrader:
             except Exception as e:
                 print(f"Paper trading error: {e}")
                 time.sleep(5)
+
+    def _open_positions_count(self) -> int:
+        return sum(1 for b in self.books.values() if int(b.position) != 0)
 
     def _bar_ts_str(self, row: pd.Series) -> str:
         t = row.name
@@ -171,7 +184,10 @@ class PaperTrader:
                 self._clear_position(book)
 
         if book.position != 0 and book.position_remaining > 0 and check_sl_hit(book.position, row, book.stop_loss):
-            self._partial_exit(book, float(row["close"]), row, book.position_remaining, "STOP_LOSS")
+            sl_reason = self._sl_reason_if_enabled(book, df, row)
+            self._partial_exit(
+                book, float(row["close"]), row, book.position_remaining, "STOP_LOSS", sl_reason=sl_reason
+            )
             self._clear_position(book)
 
         if (
@@ -198,15 +214,49 @@ class PaperTrader:
             self._clear_position(book)
 
         if book.position == 0 and int(row.get("signal", 0)) != 0:
+            cap = getattr(self.config, "MAX_CONCURRENT_POSITIONS", None)
+            if cap is not None and int(cap) > 0 and self._open_positions_count() >= int(cap):
+                return
             cx = confluence_breakdown(row, self.config)
             c = int(cx["count"])
             if c >= int(self.config.MIN_CONFLUENCE) and float(row.get("signal_strength", 0)) >= float(
                 self.config.MIN_SIGNAL_STRENGTH
             ):
                 book.position = int(row["signal"])
-                book.entry_price = price
+                book.last_confluence_at_entry = float(row.get("signal_strength", 0) or 0.0)
+                raw = read_raw_spec()
+                use_dirty = self._dirty_execution_enabled() and "volume" in df.columns
+                if use_dirty:
+                    atr_s = _wilder_atr_series(df, period=14)
+                    vol_s = pd.to_numeric(df["volume"], errors="coerce").fillna(0.0)
+                    sim = DirtyFillSimulator(raw, atr_s, vol_s)
+                    direction = "buy" if book.position == 1 else "sell"
+                    fill = sim.simulate_fill(
+                        row_index=idx,
+                        requested_price=price,
+                        requested_qty=1.0,
+                        direction=direction,
+                        symbol=book.symbol,
+                    )
+                    book.last_fill = fill
+                    book.entry_price = float(fill.filled_price)
+                    time.sleep(min(2.5, max(0.0, fill.latency_ms / 1000.0)))
+                    if bool(getattr(self.config, "MODEL_PARTIAL_FILLS", True)) and fill.partial_fill:
+                        book.position_remaining = min(1.0, max(1e-9, fill.filled_qty))
+                    else:
+                        book.position_remaining = 1.0
+                    if bool(getattr(self.config, "LOG_EVERY_FILL", False)):
+                        print(
+                            f"Dirty fill | {book.symbol} | req={fill.requested_price:.6f} "
+                            f"fill={fill.filled_price:.6f} bps={fill.slippage_bps:.1f} "
+                            f"lat_ms={fill.latency_ms} partial={fill.partial_fill}"
+                        )
+                else:
+                    book.last_fill = neutral_fill(price, 1.0)
+                    book.entry_price = price
+                    book.position_remaining = 1.0
+
                 book.entry_time = datetime.now(timezone.utc)
-                book.position_remaining = 1.0
                 book.bars_held = 0
                 book.last_bar_ts = bar_ts
 
@@ -270,8 +320,43 @@ class PaperTrader:
                         "entry_reason_text": book.entry_reason_text,
                     },
                 )
+                notify_paper_open(
+                    book.symbol,
+                    "LONG" if book.position == 1 else "SHORT",
+                    float(book.entry_price),
+                    float(book.stop_loss),
+                    c,
+                    book.entry_reason_text,
+                )
 
-    def _partial_exit(self, book: SymbolPaperBook, exit_price: float, row: pd.Series, fraction: float, exit_type: str):
+    def _sl_reason_if_enabled(self, book: SymbolPaperBook, df: pd.DataFrame, row: pd.Series) -> Optional[str]:
+        raw = read_raw_spec()
+        de = raw.get("dirty_execution") or {}
+        if not de.get("log_sl_reason"):
+            return None
+        fill = book.last_fill if book.last_fill is not None else neutral_fill(book.entry_price, book.position_remaining)
+        atr_s = _wilder_atr_series(df, period=14)
+        vol_s = pd.to_numeric(df["volume"], errors="coerce").fillna(0.0) if "volume" in df.columns else pd.Series(
+            1.0, index=df.index
+        )
+        sim = DirtyFillSimulator(raw, atr_s, vol_s)
+        return sim.tag_sl_reason(
+            fill,
+            row,
+            float(book.stop_loss),
+            float(book.last_confluence_at_entry or 0.0),
+            float(book.atr_at_entry or 0.0),
+        )
+
+    def _partial_exit(
+        self,
+        book: SymbolPaperBook,
+        exit_price: float,
+        row: pd.Series,
+        fraction: float,
+        exit_type: str,
+        sl_reason: Optional[str] = None,
+    ):
         pnl = close_partial_pnl(
             book.position,
             exit_price,
@@ -283,15 +368,16 @@ class PaperTrader:
         )
         book.capital += pnl
         book.position_remaining = max(0.0, book.position_remaining - float(fraction))
-        book.trades.append(
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "symbol": book.symbol,
-                "exit_type": exit_type,
-                "pnl": pnl,
-                "exit_price": exit_price,
-            }
-        )
+        trade_rec: Dict[str, Any] = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "symbol": book.symbol,
+            "exit_type": exit_type,
+            "pnl": pnl,
+            "exit_price": exit_price,
+        }
+        if sl_reason:
+            trade_rec["sl_reason"] = sl_reason
+        book.trades.append(trade_rec)
         self.trades.append(book.trades[-1])
 
         ext = exit_narrative(
@@ -331,6 +417,7 @@ class PaperTrader:
                 "exit_reason_text": ext,
             },
         )
+        notify_paper_exit(book.symbol, exit_type, float(pnl), float(exit_price), ext)
 
     def _close_all(self, book: SymbolPaperBook, exit_price: float, row: pd.Series, exit_type: str):
         if book.position_remaining <= 0:
@@ -351,6 +438,8 @@ class PaperTrader:
         book.bars_held = 0
         book.entry_reason_json = None
         book.entry_reason_text = None
+        book.last_fill = None
+        book.last_confluence_at_entry = 0.0
 
     def stop(self):
         self.running = False
@@ -364,4 +453,4 @@ class PaperTrader:
                 except Exception as e:
                     print(f"Flatten on stop ({book.symbol}): {e}")
             self._clear_position(book)
-        print("📄 Paper trading stopped")
+        print("Paper trading stopped")

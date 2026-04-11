@@ -10,14 +10,24 @@ from typing import Any, Dict, List, Tuple
 from strategy.load_spec import get_gates, read_raw_spec
 
 
+def _in_kill_zone() -> bool:
+    try:
+        from session_clock import get_session_state
+
+        return bool(get_session_state().get("in_kill_zone"))
+    except Exception:
+        return False
+
+
 class RiskEngine:
     def __init__(self, config: Any):
         self.config = config
 
-    def check_kill_switch(self) -> Tuple[bool, str]:
+    def check_kill_switch(self, mode: str = "PAPER") -> Tuple[bool, str]:
         gates = get_gates()
-        if gates.get("kill_switch"):
-            return False, "Kill switch ON (strategy/spec.yaml gates.kill_switch)"
+        # Global halt for real orders only; paper keeps running for convergence drills.
+        if gates.get("kill_switch") and str(mode).upper() == "LIVE":
+            return False, "Kill switch ON (strategy/spec.yaml gates.kill_switch) — LIVE halted"
         return True, "ok"
 
     def allow_new_risk(
@@ -28,15 +38,18 @@ class RiskEngine:
         estimated_notional_usd: float = 0.0,
     ) -> Tuple[bool, List[str]]:
         reasons: List[str] = []
-        ok, msg = self.check_kill_switch()
+        ok, msg = self.check_kill_switch(mode)
         if not ok:
             return False, [msg]
 
         raw = read_raw_spec()
         risk = raw.get("risk") or {}
         max_notional = float(risk.get("max_position_notional_usd") or 1e12)
+        gates = get_gates()
 
-        if mode.upper() == "LIVE":
+        if str(mode).upper() == "LIVE":
+            if gates.get("require_kill_zone_for_live") and not _in_kill_zone():
+                return False, ["LIVE blocked: outside kill zone (gates.require_kill_zone_for_live)"]
             if not getattr(self.config, "BINANCE_API_KEY", ""):
                 return False, ["LIVE blocked: no BINANCE_API_KEY"]
             if estimated_notional_usd > max_notional:

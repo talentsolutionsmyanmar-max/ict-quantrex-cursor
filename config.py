@@ -20,6 +20,25 @@ class Config:
     LIQUIDITY_BUFFER = 0.006
     FVG_THRESHOLD = 0.001
     OTE_LEVELS = [0.62, 0.705, 0.79]
+    # v2 spec (ict.fvg.*) — adaptive uses ATR-normalized gap; static keeps % of close
+    FVG_METHOD = "static"
+    FVG_MIN_GAP_ATR = 0.3
+    FVG_CONFIRMATION_CANDLES = 0
+    FVG_MITIGATION_FILTER = False
+    FVG_IGNORE_MITIGATED = False
+
+    # v2 market.allocation — max open symbols in paper (None = unlimited)
+    ALLOCATION_METHOD = "equal"
+    MAX_CONCURRENT_POSITIONS = None
+    CORRELATION_CAP = 0.7
+    CORRELATION_REDUCE_THRESHOLD = 0.85
+
+    # v2 ict.liquidity — 0 disables volume spike filter on sweeps
+    SWEEP_VOLUME_SPIKE_FACTOR = 0.0
+
+    # execution.* from spec (paper friction toggles)
+    MODEL_PARTIAL_FILLS = True
+    LOG_EVERY_FILL = False
 
     # === RISK MANAGEMENT (FIXED) ===
     INITIAL_CAPITAL = 10000

@@ -1,6 +1,23 @@
 import pandas as pd
 import numpy as np
 from regime import annotate_regime
+from session_clock import build_kill_zone_min_strength_overlay
+from strategy.load_spec import get_kill_zones
+
+
+def _wilder_atr_series(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = df["close"].astype(float)
+    tr = pd.concat(
+        [
+            (high - low),
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return tr.ewm(alpha=1.0 / max(1, int(period)), adjust=False).mean().fillna(0.0)
 
 
 class ICTEngine:
@@ -45,8 +62,19 @@ class ICTEngine:
         c3_low = df["low"].shift(-2)
         c3_high = df["high"].shift(-2)
 
-        df["bullish_fvg"] = (c3_low > c1_high) & ((c3_low - c1_high) > df["close"] * self.config.FVG_THRESHOLD)
-        df["bearish_fvg"] = (c3_high < c1_low) & ((c1_low - c3_high) > df["close"] * self.config.FVG_THRESHOLD)
+        gap_bull = c3_low - c1_high
+        gap_bear = c1_low - c3_high
+        method = str(getattr(self.config, "FVG_METHOD", "static") or "static").lower()
+
+        if method == "adaptive":
+            atr = _wilder_atr_series(df, period=14)
+            min_gap = atr * float(getattr(self.config, "FVG_MIN_GAP_ATR", 0.3))
+            df["bullish_fvg"] = (c3_low > c1_high) & (gap_bull > min_gap)
+            df["bearish_fvg"] = (c3_high < c1_low) & (gap_bear > min_gap)
+        else:
+            thr = df["close"] * float(self.config.FVG_THRESHOLD)
+            df["bullish_fvg"] = (c3_low > c1_high) & (gap_bull > thr)
+            df["bearish_fvg"] = (c3_high < c1_low) & (gap_bear > thr)
 
         return df
 
@@ -80,11 +108,21 @@ class ICTEngine:
     def liquidity_sweep_detection(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
 
+        factor = float(getattr(self.config, "SWEEP_VOLUME_SPIKE_FACTOR", 0) or 0)
+        if factor > 0 and "volume" in df.columns:
+            vol = pd.to_numeric(df["volume"], errors="coerce").fillna(0.0)
+            vma = vol.rolling(20, min_periods=1).mean()
+            vol_ok = vol >= factor * vma.replace(0.0, np.nan)
+            vol_ok = vol_ok.fillna(False)
+        else:
+            vol_ok = pd.Series(True, index=df.index)
+
         df["bullish_sweep"] = (
             df["liquidity_low_prev"].notna()
             & (df["low"] < df["liquidity_low_prev"])
             & (df["close"] > df["liquidity_low_prev"])
             & (df["discount"])
+            & vol_ok
         )
 
         df["bearish_sweep"] = (
@@ -92,6 +130,7 @@ class ICTEngine:
             & (df["high"] > df["liquidity_high_prev"])
             & (df["close"] < df["liquidity_high_prev"])
             & (df["premium"])
+            & vol_ok
         )
 
         return df
@@ -155,6 +194,8 @@ class ICTEngine:
         strength = sweep + fvg + pd_ctx + ote
         df["signal_strength"] = np.where(sig != 0, np.minimum(strength, 100.0), 0.0).astype(float)
 
+        df = self._apply_kill_zone_strength_floor(df)
+
         # Snapshot before optional regime gate (for backtest A/B: how many raw ICT bars were zeroed).
         df["signal_pre_regime_gate"] = df["signal"].astype(int)
 
@@ -190,6 +231,36 @@ class ICTEngine:
             df["regime_gate_allowed"] = True
             df["regime_gate_reason"] = "disabled"
             df["regime_gate_removed"] = False
+        return df
+
+    def _apply_kill_zone_strength_floor(self, df: pd.DataFrame) -> pd.DataFrame:
+        """spec sessions.kill_zones[].min_signal_strength — uses each bar's UTC time."""
+        df = df.copy()
+        base = float(getattr(self.config, "MIN_SIGNAL_STRENGTH", 0))
+        ov = build_kill_zone_min_strength_overlay(get_kill_zones())
+        if not any(x is not None for x in ov):
+            df["session_strength_min"] = base
+            return df
+
+        if "timestamp" in df.columns:
+            ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+        elif isinstance(df.index, pd.DatetimeIndex):
+            ts = pd.to_datetime(pd.Series(np.asarray(df.index), index=df.index), utc=True, errors="coerce")
+        else:
+            df["session_strength_min"] = base
+            return df
+
+        m = (ts.dt.hour.fillna(0).astype(int) * 60 + ts.dt.minute.fillna(0).astype(int)) % 1440
+        m_vals = m.to_numpy(dtype=int)
+        eff = np.array([base if ov[mi] is None else max(base, float(ov[mi])) for mi in m_vals], dtype=float)
+        eff = np.where(ts.isna().to_numpy(), base, eff)
+        df["session_strength_min"] = eff
+
+        sig = df["signal"].astype(int)
+        weak = (sig != 0) & (df["signal_strength"].astype(float) < eff)
+        df.loc[weak, "signal"] = 0
+        df.loc[weak, "signal_strength"] = 0.0
+        df.loc[weak, "confluence_count_ict"] = 0
         return df
 
     def _calculate_strength(self, row: pd.Series) -> float:

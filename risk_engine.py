@@ -55,6 +55,9 @@ class RiskEngine:
                 return False, ["LIVE blocked: no BINANCE_API_KEY"]
             if estimated_notional_usd > max_notional:
                 return False, [f"Notional {estimated_notional_usd} exceeds max_position_notional_usd {max_notional}"]
+            g_ok, g_msgs = self.check_entry_gates(symbol)
+            if not g_ok:
+                return False, g_msgs
 
         reasons.append("pre_trade_ok")
         return True, reasons

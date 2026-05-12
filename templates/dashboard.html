@@ -11,7 +11,8 @@
       rel="stylesheet"
     />
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <!-- Match server Flask-SocketIO / python-socketio; polling-first helps strict proxies that break WS upgrades (mis-reported as "auth" in some browsers). -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
     <style>
       :root {
         --bg-deep: #0c0f14;
@@ -1230,6 +1231,29 @@
     </div>
 
     <script>
+      /** Parse JSON after reading full body — avoids opaque SyntaxError when proxy returns empty/truncated body. */
+      async function fetchJsonLoose(url, options) {
+        const r = await fetch(url, options);
+        const text = await r.text();
+        if (!text || !text.trim()) {
+          throw new Error(
+            "Empty response (HTTP " +
+              r.status +
+              ") — often a reverse-proxy timeout or crashed worker. For HTTPS, increase Caddy read_timeout; for backtests, try a shorter date range."
+          );
+        }
+        try {
+          return { ok: r.ok, status: r.status, data: JSON.parse(text) };
+        } catch (parseErr) {
+          const snip = text.slice(0, 200).replace(/\s+/g, " ");
+          throw new Error("HTTP " + r.status + ": not JSON (" + parseErr.message + ") " + snip);
+        }
+      }
+
+      function sleepMs(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+      }
+
       (function () {
         try {
           if (new URLSearchParams(window.location.search).get("live") === "1") {
@@ -1274,9 +1298,12 @@
         const kzEl = document.getElementById("ops-kz");
         if (!spotEl || !futEl) return;
         try {
-          const [hRes, sRes] = await Promise.all([fetch("/api/health"), fetch("/api/session")]);
-          const h = await hRes.json();
-          const sj = await sRes.json();
+          const [hWrap, sWrap] = await Promise.all([
+            fetchJsonLoose("/api/health"),
+            fetchJsonLoose("/api/session"),
+          ]);
+          const h = hWrap.data;
+          const sj = sWrap.data;
           const sess = sj.session || {};
 
           const fmt = (node, ok, ms) => {
@@ -1607,7 +1634,21 @@
         maybeSetupAlertsForSymbol(sym, data);
       }
 
-      const socket = io({ transports: ["websocket", "polling"] });
+      const socket = io({
+        path: "/socket.io/",
+        transports: ["polling", "websocket"],
+        upgrade: true,
+        rememberUpgrade: true,
+      });
+      socket.on("connect_error", (err) => {
+        const msg = err && err.message ? err.message : "connect failed";
+        console.warn("Socket.IO connect_error:", msg);
+        const dot = document.getElementById("live-cta-dot");
+        if (dot) {
+          dot.classList.remove("connected");
+          dot.setAttribute("title", "Socket.IO error — " + msg + " (live updates blocked; REST/backtest may still work)");
+        }
+      });
       const plotlyDark = {
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
@@ -1917,7 +1958,7 @@
         out.textContent = "Applying…";
         const body = readBacktestPayload();
         try {
-          const r = await fetch("/api/config/apply-genes", {
+          const { data: res } = await fetchJsonLoose("/api/config/apply-genes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1927,7 +1968,6 @@
               initial_capital: body.initial_capital,
             }),
           });
-          const res = await r.json();
           out.textContent = JSON.stringify(res, null, 2);
         } catch (e) {
           out.textContent = String(e);
@@ -1939,12 +1979,11 @@
         out.style.display = "block";
         out.textContent = "Resetting…";
         try {
-          const r = await fetch("/api/config/apply-genes", {
+          const { data: res } = await fetchJsonLoose("/api/config/apply-genes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ reset: true }),
           });
-          const res = await r.json();
           out.textContent = JSON.stringify(res, null, 2);
         } catch (e) {
           out.textContent = String(e);
@@ -1956,8 +1995,7 @@
         out.style.display = "block";
         out.textContent = "Loading…";
         try {
-          const r = await fetch("/api/config/runtime");
-          const res = await r.json();
+          const { data: res } = await fetchJsonLoose("/api/config/runtime");
           out.textContent = JSON.stringify(res, null, 2);
         } catch (e) {
           out.textContent = String(e);
@@ -2414,18 +2452,46 @@
         const btn = document.getElementById("backtest-btn");
         btn.disabled = true;
         const prev = btn.textContent;
-        btn.textContent = "Running…";
+        btn.textContent = "Queued…";
 
         const banner = document.getElementById("metrics-banner");
         banner.classList.add("hidden");
 
         try {
-          const response = await fetch("/api/backtest", {
+          const startedAt = Date.now();
+          const payload = readBacktestPayload();
+          const { data: startJob } = await fetchJsonLoose("/api/backtest/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(readBacktestPayload()),
+            body: JSON.stringify(payload),
           });
-          const data = await response.json();
+          if (!startJob.success || !startJob.job_id) {
+            throw new Error(startJob.error || "Could not start backtest job");
+          }
+
+          const hardTimeoutMs = 10 * 60 * 1000;
+          let data = null;
+          while (Date.now() - startedAt < hardTimeoutMs) {
+            await sleepMs(1200);
+            const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000));
+            btn.textContent = "Running… " + elapsedSec + "s";
+
+            const { data: status } = await fetchJsonLoose(`/api/backtest/status/${startJob.job_id}`);
+            if (!status.success) {
+              throw new Error(status.error || "Backtest status failed");
+            }
+            if (status.state === "done") {
+              data = status.result || null;
+              break;
+            }
+            if (status.state === "failed") {
+              throw new Error(status.error || "Backtest failed");
+            }
+          }
+          if (!data) {
+            throw new Error("Backtest still running after 10 minutes. Narrow date range/timeframe and retry.");
+          }
+
           if (data.success) {
             updateMetrics(data.metrics);
             updateCharts(data);
@@ -2763,10 +2829,9 @@
         const el = document.getElementById("bg-evolution-log");
         if (!el) return;
         try {
-          const r = await fetch("/api/research/evolution-status?lines=120");
-          const j = await r.json();
+          const { data: j } = await fetchJsonLoose("/api/research/evolution-status?lines=120");
           if (!j || !j.success) {
-            el.textContent = "Evolution status unavailable";
+            el.textContent = "Evolution status unavailable" + (j && j.error ? ": " + j.error : "");
             return;
           }
 

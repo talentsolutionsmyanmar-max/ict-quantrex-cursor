@@ -1,0 +1,220 @@
+{
+  "generated_at_utc": "2026-04-27T13:13:17.460603+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "top10": [
+    {
+      "name": "ts74_tc4_rs72_rc2",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 72,
+        "range_min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs72_rc2.yaml"
+    },
+    {
+      "name": "ts74_tc4_rs72_rc3",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 72,
+        "range_min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs72_rc3.yaml"
+    },
+    {
+      "name": "ts74_tc4_rs74_rc2",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 74,
+        "range_min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs74_rc2.yaml"
+    },
+    {
+      "name": "ts74_tc4_rs74_rc3",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 74,
+        "range_min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs74_rc3.yaml"
+    },
+    {
+      "name": "ts74_tc4_rs76_rc2",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 76,
+        "range_min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs76_rc2.yaml"
+    },
+    {
+      "name": "ts74_tc4_rs76_rc3",
+      "params": {
+        "trend_min_signal_strength": 74,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 76,
+        "range_min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts74_tc4_rs76_rc3.yaml"
+    },
+    {
+      "name": "ts76_tc4_rs72_rc2",
+      "params": {
+        "trend_min_signal_strength": 76,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 72,
+        "range_min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts76_tc4_rs72_rc2.yaml"
+    },
+    {
+      "name": "ts76_tc4_rs72_rc3",
+      "params": {
+        "trend_min_signal_strength": 76,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 72,
+        "range_min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts76_tc4_rs72_rc3.yaml"
+    },
+    {
+      "name": "ts76_tc4_rs74_rc2",
+      "params": {
+        "trend_min_signal_strength": 76,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 74,
+        "range_min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts76_tc4_rs74_rc2.yaml"
+    },
+    {
+      "name": "ts76_tc4_rs74_rc3",
+      "params": {
+        "trend_min_signal_strength": 76,
+        "trend_min_confluence": 4,
+        "range_min_signal_strength": 74,
+        "range_min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 40.535,
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\ts76_tc4_rs74_rc3.yaml"
+    }
+  ],
+  "all_count": 36
+}

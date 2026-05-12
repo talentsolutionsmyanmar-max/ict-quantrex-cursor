@@ -5,6 +5,7 @@ Walk-forward OOS, crisis stress windows, and lightweight evolutionary search ove
 from __future__ import annotations
 
 import random
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -433,6 +434,39 @@ def _promotion_test_metrics_snapshot(detail: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _trade_floor_penalty_from_metrics(m: Dict[str, Any], *, env_name: str = "RESEARCH_MIN_TRADES_OOS") -> Tuple[float, Dict[str, Any]]:
+    floor = int(os.getenv(env_name, "30") or 30)
+    t = 0
+    try:
+        t = int((m or {}).get("total_trades", 0) or 0)
+    except Exception:
+        t = 0
+    if floor <= 0:
+        return 0.0, {"enabled": False, "floor": floor, "trades": t}
+    if t >= floor:
+        return 0.0, {"enabled": True, "floor": floor, "trades": t, "penalty": 0.0}
+    gap = max(0, floor - t)
+    # Conservative linear penalty; 0 trades with floor=30 => -3.0 fitness.
+    penalty = float(gap / max(1, floor) * 3.0)
+    return penalty, {"enabled": True, "floor": floor, "trades": t, "penalty": penalty}
+
+
+def _trade_floor_penalty_from_aggregate(agg: Dict[str, Any], *, env_name: str = "RESEARCH_MIN_TRADES_OOS_MULTI") -> Tuple[float, Dict[str, Any]]:
+    floor = int(os.getenv(env_name, "80") or 80)
+    t = 0
+    try:
+        t = int((agg or {}).get("total_trades_all", 0) or 0)
+    except Exception:
+        t = 0
+    if floor <= 0:
+        return 0.0, {"enabled": False, "floor": floor, "trades": t}
+    if t >= floor:
+        return 0.0, {"enabled": True, "floor": floor, "trades": t, "penalty": 0.0}
+    gap = max(0, floor - t)
+    penalty = float(gap / max(1, floor) * 4.0)
+    return penalty, {"enabled": True, "floor": floor, "trades": t, "penalty": penalty}
+
+
 def evaluate_config_oos_multi(
     cfg: Config,
     *,
@@ -473,6 +507,8 @@ def evaluate_config_oos_multi(
 
     # Conservative weighting: mostly OOS test core, some train core.
     fit = (0.65 * te_core) + (0.25 * tr_core) - (0.10 * (p_tr + p_te)) - float(ppen)
+    trade_floor_penalty, trade_floor_detail = _trade_floor_penalty_from_aggregate(te_agg if isinstance(te_agg, dict) else {})
+    fit -= float(trade_floor_penalty)
     regime_guard_detail: Dict[str, Any] = {"enabled": False, "penalty": 0.0}
     if bool(getattr(cfg, "REGIME_GATE_ENABLED", False)):
         c_tr_off = clone_config_genes(cfg)
@@ -520,6 +556,7 @@ def evaluate_config_oos_multi(
         "regime_train_aggregate": aggregate_regime_from_multi_result(r_tr),
         "regime_test_aggregate": aggregate_regime_from_multi_result(r_te),
         "regime_guard": regime_guard_detail,
+        "trade_floor": trade_floor_detail,
     }
     return float(fit), detail
 
@@ -620,6 +657,8 @@ def evaluate_config_oos(
     genes = {a: getattr(cfg, a) for a, _ in GENE_SPACE}
     ppen = parsimony_penalty_vs_baseline(genes, baseline_genes)
     fit = composite_fitness(m_tr, m_te, crisis_metrics, parsimony_penalty=ppen)
+    trade_floor_penalty, trade_floor_detail = _trade_floor_penalty_from_metrics(m_te if isinstance(m_te, dict) else {})
+    fit -= float(trade_floor_penalty)
     detail = {
         "fitness": fit,
         "train_metrics": m_tr,
@@ -628,6 +667,7 @@ def evaluate_config_oos(
         "parsimony_penalty": ppen,
         "regime_summary_train": m_tr.get("regime_summary") if isinstance(m_tr, dict) else None,
         "regime_summary_test": m_te.get("regime_summary") if isinstance(m_te, dict) else None,
+        "trade_floor": trade_floor_detail,
     }
     return fit, detail
 

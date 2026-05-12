@@ -1,0 +1,99 @@
+{
+  "generated_at_utc": "2026-04-27T11:48:57.099302+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "rows": [
+    {
+      "name": "combo_relaxed",
+      "notes": "Regime off + FVG relaxed + session overlay off",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\combo_relaxed.yaml",
+      "metrics": {
+        "profit_factor": 0.76,
+        "max_drawdown": -11.88,
+        "expectancy": -5.86,
+        "total_trades": 202.0,
+        "unique_entries": 152.0,
+        "win_rate": 48.02,
+        "total_pnl": -1183.54,
+        "sharpe_ratio": -0.31
+      }
+    },
+    {
+      "name": "regime_disabled",
+      "notes": "Disable regime gate",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\regime_disabled.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      }
+    },
+    {
+      "name": "regime_loosened",
+      "notes": "Loosen regime strict minima",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\regime_loosened.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      }
+    },
+    {
+      "name": "baseline",
+      "notes": "Current spec",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\baseline.yaml",
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "session_overlay_relaxed",
+      "notes": "Neutralize kill-zone strength overlay",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\session_overlay_relaxed.yaml",
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "fvg_relaxed",
+      "notes": "Remove strict FVG confirmations",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\fvg_relaxed.yaml",
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    }
+  ]
+}

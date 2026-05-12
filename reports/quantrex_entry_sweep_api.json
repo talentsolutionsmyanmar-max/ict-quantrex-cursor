@@ -1,0 +1,102 @@
+{
+  "generated_at_utc": "2026-04-27T09:49:18.236605+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "rows": [
+    {
+      "name": "baseline",
+      "payload": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-04-24"
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "sig68_conf3",
+      "payload": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-04-24",
+        "min_signal_strength": 68,
+        "min_confluence": 3
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "sig72_conf2",
+      "payload": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-04-24",
+        "min_signal_strength": 72,
+        "min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "sig68_conf2",
+      "payload": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-04-24",
+        "min_signal_strength": 68,
+        "min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "sig65_conf2",
+      "payload": {
+        "start_date": "2024-01-01",
+        "end_date": "2026-04-24",
+        "min_signal_strength": 65,
+        "min_confluence": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    }
+  ]
+}

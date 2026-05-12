@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-05-09T15:16:36.014644+00:00",
+  "total_rows_long": 130,
+  "rows_by_symbol": {
+    "BTCUSDT": 44,
+    "ETHUSDT": 43,
+    "SOLUSDT": 43
+  },
+  "statsmodels_available": true,
+  "wide_aligned_rows": 43,
+  "aligned_feature_rows": 40,
+  "imbalance_columns_present": [
+    "btc_imb",
+    "eth_imb",
+    "sol_imb"
+  ],
+  "negative_control": {
+    "granger_p_btc_to_eth_observed": 0.06782614415773536,
+    "granger_p_btc_to_eth_shuffled": 0.7969367896469745,
+    "interpretation": "Expect shuffled p not systematically < 0.05 if methodology sound"
+  },
+  "walk_forward_granger_btc_eth": {
+    "status": "INSUFFICIENT_DATA",
+    "bars_available": 40,
+    "bars_recommended": 139,
+    "window_used": 120
+  },
+  "full_sample_granger_btc_eth_p_min": 0.06782614415773536,
+  "status": "ACCUMULATE",
+  "hint": "Grok guideline: prefer 500+ long-format rows (~15k+ aligned for robust multi-window)."
+}

@@ -1,0 +1,12 @@
+{
+  "total_trades": 0,
+  "pf_actual": 0.0,
+  "expectancy_r": 0.0,
+  "exit_reason_counts": {},
+  "id": "combo_0",
+  "params": {
+    "breakeven_move_to_r": 0.05,
+    "trail_distance_r": 0.8,
+    "runner_allocation_pct": 0.0
+  }
+}

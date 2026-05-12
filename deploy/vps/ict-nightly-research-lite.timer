@@ -1,0 +1,10 @@
+[Unit]
+Description=Run ICT Nightly Research Lite daily (off-peak)
+
+[Timer]
+OnCalendar=*-*-* 02:40:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

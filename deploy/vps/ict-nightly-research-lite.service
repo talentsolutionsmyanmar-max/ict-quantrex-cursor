@@ -1,0 +1,13 @@
+[Unit]
+Description=ICT Nightly Research Lite (budget mode Chief QE sweep)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=trader
+WorkingDirectory=/home/trader/ict-quantrex-cursor
+Environment=PATH=/home/trader/ict-quantrex-cursor/venv/bin:/usr/bin:/bin
+EnvironmentFile=-/home/trader/ict-quantrex-cursor/.env
+ExecStart=/home/trader/ict-quantrex-cursor/deploy/vps/run-nightly-research-lite.sh
+TimeoutStartSec=4h
+Nice=8

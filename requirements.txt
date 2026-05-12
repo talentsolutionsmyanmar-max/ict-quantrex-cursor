@@ -9,3 +9,8 @@ urllib3==1.26.18
 python-dotenv==1.0.0
 PyYAML==6.0.1
 plotly==5.18.0
+supabase==2.5.1
+ccxt==4.3.98
+statsmodels>=0.14.0
+# Phase 0 optional macro proxy (only used when data_sources.macro.sp500.enabled: true)
+yfinance>=0.2.38

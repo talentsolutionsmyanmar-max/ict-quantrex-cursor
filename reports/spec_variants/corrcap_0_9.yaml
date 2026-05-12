@@ -1,0 +1,225 @@
+spec_version: 2.1
+meta:
+  name: "AutoResearchClaw ICT Core \u2014 Realism Hardened"
+  description: Deterministic ICT pipeline + dirty execution modeling for paper/live
+    convergence
+  baseline_locked: v1.8
+market:
+  symbol: BTCUSDT
+  timeframe: 15m
+  binance_spot_base_url: https://api.binance.com/api/v3
+  watchlist:
+  - BTCUSDT
+  - ETHUSDT
+  - SOLUSDT
+  allocation:
+    method: volatility_parity
+    max_concurrent_positions: 3
+    correlation_cap: 0.85
+ict:
+  range_hours: 5
+  liquidity_buffer: 0.006
+  fvg_threshold: 0.0015
+  ote_levels:
+  - 0.62
+  - 0.705
+  - 0.79
+  fvg:
+    method: adaptive
+    min_gap_atr: 0.35
+    confirmation_candles: 1
+    mitigation_filter: true
+    ignore_mitigated: true
+  liquidity:
+    sweep_confirmation: close_beyond
+    retest_required: false
+    volume_spike_factor: 1.5
+risk:
+  initial_capital: 10000
+  risk_per_trade: 0.004
+  atr_multiplier: 2.5
+  min_confluence: 3
+  min_signal_strength: 72
+  max_daily_loss: 0.02
+  max_drawdown: 0.08
+  max_position_notional_usd: 30000
+  sizing_method: volatility_targeting
+  volatility_target_annual: 0.15
+execution:
+  tp1_ratio: 1.2
+  tp2_ratio: 2.0
+  tp3_ratio: 3.0
+  tp1_pct: 0.5
+  tp2_pct: 0.3
+  tp3_pct: 0.2
+  trail_after_tp1: true
+  trail_atr_multiplier: 1.5
+  max_candles_hold: 36
+  model_partial_fills: true
+  queue_delay_ms:
+  - 500
+  - 2000
+backtest:
+  start_date: '2024-01-01'
+  end_date: '2025-03-31'
+  commission: 0.0005
+  slippage: 0.0015
+  slippage_model: atr_scaled
+  slippage_params:
+    base_bps: 15
+    atr_multiplier: 0.5
+    low_liquidity_penalty: 1.8
+operations:
+  poll_interval_sec: 5
+  mode: PAPER
+  log_every_fill: true
+pre_trade:
+  enabled: true
+  log_binance_depth_snapshot: true
+  depth_levels: 50
+  depth_top_n: 20
+  checklist:
+    regime_ok: true
+    liquidity_map_reviewed: false
+    tape_or_cvd_aligned: false
+    emotional_state: neutral
+  binance_public_enrich:
+    enabled: true
+    agg_trades_limit: 400
+    timeout_sec: 1.5
+    oi_period: 5m
+    oi_hist_limit: 3
+    include:
+    - flow
+    - premium
+    - oi
+  mmt_enrich:
+    enabled: false
+    exchange: binancef
+    timeout_sec: 0.8
+    tf: 1m
+    lookback_sec: 420
+    include:
+    - vb
+    - vs
+    - tb
+    - ts
+    - sk
+    - fr
+    - lb
+    - ls
+    vd_enabled: false
+    vd_bucket: 1
+regime:
+  enabled: true
+  method: ensemble
+  adx_period: 14
+  adx_min: 20
+  atr_period: 14
+  atr_pct_min: 0.4
+  ema_fast: 20
+  ema_slow: 50
+  persist_bars: 3
+  range_min_signal_strength: 76
+  range_min_confluence: 3
+  regime_actions:
+    ranging:
+      max_positions: 1
+      require_fvg_confirmation: true
+    trending:
+      allow_pyramiding: false
+    trend_down:
+      reduce_position_size: 0.45
+      require_fvg_confirmation: true
+      min_signal_strength: 80
+      min_confluence: 4
+    trend_up:
+      reduce_position_size: 0.5
+      require_fvg_confirmation: true
+      min_signal_strength: 78
+      min_confluence: 4
+    high_vol:
+      reduce_position_size: 0.45
+      widen_stop_atr_multiplier: 3.0
+sessions:
+  clock: UTC
+  timezone_source: exchange
+  dst_adjust: false
+  kill_zones:
+  - name: Asian
+    utc_start: 00:00
+    utc_end: 04:00
+    min_signal_strength: 75
+  - name: London
+    utc_start: 07:00
+    utc_end: '11:00'
+  - name: New York
+    utc_start: '13:00'
+    utc_end: '17:00'
+gates:
+  require_kill_zone_for_live: true
+  kill_switch: false
+  min_liquidity_usd: 5000000
+  max_funding_rate: 0.0005
+  correlation_cap_btc: 0.9
+  market_gate_cache_ttl_sec: 60
+  correlation_klines_limit: 200
+walk_forward:
+  enabled: true
+  optimization_window: 180d
+  validation_window: 30d
+  step_size: 30d
+  metrics_to_track:
+  - sharpe_ratio
+  - max_drawdown
+  - profit_factor
+  - walk_forward_efficiency
+  min_wfe_threshold: 0.55
+  parameter_bounds:
+    risk.atr_multiplier:
+    - 2.0
+    - 3.5
+    risk.risk_per_trade:
+    - 0.003
+    - 0.01
+    ict.fvg.min_gap_atr:
+    - 0.25
+    - 0.5
+dirty_execution:
+  enabled: true
+  slippage_model: atr_volume_hybrid
+  slippage_params:
+    base_bps: 15
+    atr_contribution: 0.5
+    volume_impact_exponent: 0.3
+  latency_model:
+    type: random_uniform
+    min_ms: 500
+    max_ms: 2000
+  partial_fill_probability: 0.15
+  log_sl_reason: true
+observability:
+  log_signals: true
+  log_fills: true
+  log_sl_reasons: true
+  export_format: parquet
+  dashboard_metrics:
+  - sl_hit_reason_distribution
+  - paper_vs_backtest_pnl_correlation
+  - win_rate_by_kill_zone
+  - regime_performance_matrix
+stress_tests:
+  scenarios:
+  - name: 2022_crypto_winter
+    date_range:
+    - '2022-05-01'
+    - '2022-07-31'
+    expected_max_dd: 0.25
+validation:
+  required_fields:
+  - market.symbol
+  - risk.initial_capital
+  - backtest.start_date
+  business_rules:
+  - risk.max_drawdown > risk.max_daily_loss
+  - backtest.end_date > backtest.start_date

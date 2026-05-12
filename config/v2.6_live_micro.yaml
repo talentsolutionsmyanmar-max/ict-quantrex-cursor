@@ -1,0 +1,32 @@
+trading_universe:
+  allowed_regimes: ["trend_up", "trend_down"]
+  banned_regimes: ["chop", "ranging", "high_vol"]
+  symbols: ["BTCUSDT"]
+
+risk:
+  risk_per_trade: 0.005
+  max_daily_loss_r: 2.0
+  max_concurrent_positions: 1
+  volatility_targeting: 0.20
+
+exits:
+  trend_down:
+    stop_loss_r: 1.0
+    breakeven_at_r: 0.3
+    breakeven_move_to_r: 0.08
+    trail_start_r: 2.0
+    trail_distance_r: 0.8
+    runner_allocation_pct: 0.0
+    max_holding_hours: 36
+  trend_up:
+    stop_loss_r: 1.0
+    breakeven_at_r: 0.4
+    breakeven_move_to_r: 0.10
+    trail_start_r: 2.2
+    trail_distance_r: 0.9
+
+execution:
+  slippage_tolerance_bps: 5
+  order_type: "LIMIT_POST"
+  retry_failed_fills: true
+  max_retries: 2

@@ -1,0 +1,15 @@
+{
+  "total_signal_rows": 43,
+  "total_dom_rows": 607,
+  "merged_samples": 43,
+  "merged_with_imbalance": 19,
+  "regime_counts": {
+    "ranging": 43
+  },
+  "enter_samples": 0,
+  "skip_samples": 43,
+  "avg_imbalance_by_regime": {
+    "ranging": -0.1609
+  },
+  "note": "PREVIEW ONLY \u2014 Do not draw conclusions until Day-7 gate passes"
+}

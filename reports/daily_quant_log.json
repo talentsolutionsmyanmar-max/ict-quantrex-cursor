@@ -1,0 +1,20 @@
+{
+  "date": "2026-04-27",
+  "config_version": "v2.3",
+  "metrics": {
+    "pf": 0.01,
+    "dd": 2.57,
+    "expectancy_r": 0.0,
+    "entries": 113
+  },
+  "observations": [
+    "health_status=FAIL",
+    "pf_gate_all_pass=False"
+  ],
+  "hypotheses": [
+    "BTC-specific edge restoration required before scaling frequency",
+    "Regime-level symbol disables in weak trend_up improve quality"
+  ],
+  "next_iteration": "Run BTC-only isolation sweep and enforce PF>=1.3 before shipping any config changes",
+  "status": "PROGRESS"
+}

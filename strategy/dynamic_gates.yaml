@@ -1,0 +1,26 @@
+signal_gates:
+  base:
+    min_confluence: 3
+    min_signal_strength: 72
+  regime_overrides:
+    trend_up:
+      min_confluence: 2
+      min_signal_strength: 68
+      allow_fvg_pre_entry: true
+    trend_down:
+      min_confluence: 2
+      min_signal_strength: 70
+    chop:
+      min_confluence: 4
+      min_signal_strength: 78
+      max_position_multiplier: 0.6
+      require_order_block_alignment: true
+    high_vol:
+      min_confluence: 3
+      min_signal_strength: 75
+      require_volume_spike: true
+  symbol_overrides:
+    SOLUSDT:
+      min_confluence: 4
+      min_signal_strength: 76
+      disable_in_regimes: ["chop", "high_vol"]

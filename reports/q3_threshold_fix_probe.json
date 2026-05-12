@@ -1,0 +1,56 @@
+{
+  "window": {
+    "symbol": "BTCUSDT",
+    "timeframe": "15m",
+    "start": "2024-07-01",
+    "end": "2024-09-30",
+    "capital": 10000.0
+  },
+  "summary": {
+    "closed_trades": 103,
+    "expectancy": -0.35,
+    "max_drawdown_pct": -1.14,
+    "win_rate": 69.9,
+    "profit_factor": 0.11
+  },
+  "sl": {
+    "count": 11,
+    "hit_rate_closed": 0.10679611650485436,
+    "avg_sl_loss": -18.238632391995097
+  },
+  "tp": {
+    "TP1": {
+      "count": 36,
+      "rate_closed": 0.34951456310679613,
+      "avg_pnl": 5.035721639057392,
+      "win_rate": 1.0
+    },
+    "TP2": {
+      "count": 1,
+      "rate_closed": 0.009708737864077669,
+      "avg_pnl": 5.498195822447891,
+      "win_rate": 1.0
+    },
+    "TP3": {
+      "count": 1,
+      "rate_closed": 0.009708737864077669,
+      "avg_pnl": 6.496383742379156,
+      "win_rate": 1.0
+    }
+  },
+  "by_regime": {
+    "ranging": {
+      "trades": 103,
+      "expectancy": -0.34624239410371305,
+      "max_drawdown_pnl": -39.640658903831564,
+      "win_rate": 69.90291262135922
+    }
+  },
+  "entry_depth": {
+    "unique_entries_total": 66,
+    "unique_entries_by_regime_state": {
+      "ranging": 66
+    },
+    "pct_unique_entries_in_ranging": 100.0
+  }
+}

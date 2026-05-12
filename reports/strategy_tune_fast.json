@@ -1,0 +1,137 @@
+{
+  "generated_at_utc": "2026-04-27T12:41:24.447365+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "ranked": [
+    {
+      "name": "baseline",
+      "notes": "Current spec",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\baseline.yaml",
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 12.735000000000003
+    },
+    {
+      "name": "quality_guard_2",
+      "notes": "t_sig=78 t_conf=4 r_sig=74 r_conf=3 corr=0.88",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\quality_guard_2.yaml",
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      },
+      "score": 12.735000000000003
+    },
+    {
+      "name": "balanced_1",
+      "notes": "t_sig=76 t_conf=3 r_sig=74 r_conf=3 corr=0.88",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\balanced_1.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    },
+    {
+      "name": "balanced_2",
+      "notes": "t_sig=74 t_conf=3 r_sig=74 r_conf=2 corr=0.88",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\balanced_2.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    },
+    {
+      "name": "balanced_3",
+      "notes": "t_sig=76 t_conf=3 r_sig=72 r_conf=2 corr=0.88",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\balanced_3.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    },
+    {
+      "name": "balanced_4",
+      "notes": "t_sig=74 t_conf=3 r_sig=72 r_conf=2 corr=0.9",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\balanced_4.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    },
+    {
+      "name": "quality_guard_1",
+      "notes": "t_sig=78 t_conf=3 r_sig=74 r_conf=3 corr=0.88",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\quality_guard_1.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    },
+    {
+      "name": "throughput_push",
+      "notes": "t_sig=74 t_conf=2 r_sig=72 r_conf=2 corr=0.9",
+      "spec_path": "C:\\Users\\the RECRUITER\\Documents\\Claude-Claw\\ict-quantrex-cursor\\reports\\spec_variants\\throughput_push.yaml",
+      "metrics": {
+        "profit_factor": 0.88,
+        "max_drawdown": -0.43,
+        "expectancy": 1.73,
+        "total_trades": 37.0,
+        "unique_entries": 20.0,
+        "win_rate": 89.19,
+        "total_pnl": 63.9,
+        "sharpe_ratio": 0.04
+      },
+      "score": 6.015000000000001
+    }
+  ]
+}

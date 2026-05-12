@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from regime import annotate_regime
 from session_clock import build_kill_zone_min_strength_overlay
-from strategy.load_spec import get_kill_zones
+from strategy.load_spec import get_kill_zones, read_raw_spec
 
 
 def _wilder_atr_series(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -146,6 +146,37 @@ class ICTEngine:
         long_condition = df["discount"] & (df["bullish_sweep"] | df["bullish_fvg"])
         short_condition = df["premium"] & (df["bearish_sweep"] | df["bearish_fvg"])
 
+        # Coolish-style regime branch: optional FVG confirmation in ranging / directional trends.
+        try:
+            raw = read_raw_spec()
+            reg = raw.get("regime") if isinstance(raw, dict) else {}
+            acts = (reg or {}).get("regime_actions") if isinstance(reg, dict) else {}
+            rng = acts.get("ranging") if isinstance(acts, dict) else {}
+            require_fvg = bool((rng or {}).get("require_fvg_confirmation", False))
+            td = acts.get("trend_down") if isinstance(acts, dict) else {}
+            if not isinstance(td, dict):
+                td = {}
+            require_fvg_td = bool(td.get("require_fvg_confirmation", False))
+            tu = acts.get("trend_up") if isinstance(acts, dict) else {}
+            if not isinstance(tu, dict):
+                tu = {}
+            require_fvg_tu = bool(tu.get("require_fvg_confirmation", False))
+            if "regime_state" in df.columns:
+                is_range = df["regime_state"].astype(str).eq("ranging")
+                is_td = df["regime_state"].astype(str).eq("trend_down")
+                is_tu = df["regime_state"].astype(str).eq("trend_up")
+                if require_fvg:
+                    long_condition = long_condition & (~is_range | df["bullish_fvg"].astype(bool))
+                    short_condition = short_condition & (~is_range | df["bearish_fvg"].astype(bool))
+                if require_fvg_td:
+                    long_condition = long_condition & (~is_td | df["bullish_fvg"].astype(bool))
+                    short_condition = short_condition & (~is_td | df["bearish_fvg"].astype(bool))
+                if require_fvg_tu:
+                    long_condition = long_condition & (~is_tu | df["bullish_fvg"].astype(bool))
+                    short_condition = short_condition & (~is_tu | df["bearish_fvg"].astype(bool))
+        except Exception:
+            pass
+
         df.loc[long_condition, "signal"] = 1
         df.loc[short_condition, "signal"] = -1
 
@@ -199,15 +230,62 @@ class ICTEngine:
         # Snapshot before optional regime gate (for backtest A/B: how many raw ICT bars were zeroed).
         df["signal_pre_regime_gate"] = df["signal"].astype(int)
 
-        # Optional v1.9 regime gate. In ranging markets, require stricter strength+confluence.
+        # Optional v1.9 regime gate: ranging stricter thresholds; optional trend_down / trend_up overlays from spec.
         gate_on = bool(getattr(self.config, "REGIME_GATE_ENABLED", False))
         if gate_on and "regime_state" in df.columns:
             range_strength_min = float(getattr(self.config, "REGIME_RANGE_MIN_SIGNAL_STRENGTH", 75))
             range_conf_min = int(getattr(self.config, "REGIME_RANGE_MIN_CONFLUENCE", 3))
             is_range = df["regime_state"].astype(str).eq("ranging")
+            is_td = df["regime_state"].astype(str).eq("trend_down")
+            is_tu = df["regime_state"].astype(str).eq("trend_up")
             base_sig = df["signal"].astype(int) != 0
             strict_ok = (df["signal_strength"] >= range_strength_min) & (df["confluence_count_ict"] >= range_conf_min)
-            allow = (~base_sig) | (~is_range) | strict_ok
+            td_block: dict = {}
+            tu_block: dict = {}
+            try:
+                raw = read_raw_spec()
+                reg = raw.get("regime") if isinstance(raw, dict) else {}
+                acts = (reg or {}).get("regime_actions") if isinstance(reg, dict) else {}
+                cand_td = acts.get("trend_down") if isinstance(acts, dict) else {}
+                td_block = cand_td if isinstance(cand_td, dict) else {}
+                cand_tu = acts.get("trend_up") if isinstance(acts, dict) else {}
+                tu_block = cand_tu if isinstance(cand_tu, dict) else {}
+            except Exception:
+                td_block = {}
+                tu_block = {}
+            has_td_gate = ("min_signal_strength" in td_block) or ("min_confluence" in td_block)
+            if has_td_gate:
+                td_s = (
+                    float(td_block["min_signal_strength"])
+                    if td_block.get("min_signal_strength") is not None
+                    else float(getattr(self.config, "MIN_SIGNAL_STRENGTH", 72))
+                )
+                td_c = (
+                    int(td_block["min_confluence"])
+                    if td_block.get("min_confluence") is not None
+                    else int(getattr(self.config, "MIN_CONFLUENCE", 3))
+                )
+                strict_td_ok = (df["signal_strength"] >= td_s) & (df["confluence_count_ict"] >= td_c)
+            else:
+                strict_td_ok = pd.Series(True, index=df.index)
+
+            has_tu_gate = ("min_signal_strength" in tu_block) or ("min_confluence" in tu_block)
+            if has_tu_gate:
+                tu_s = (
+                    float(tu_block["min_signal_strength"])
+                    if tu_block.get("min_signal_strength") is not None
+                    else float(getattr(self.config, "MIN_SIGNAL_STRENGTH", 72))
+                )
+                tu_c = (
+                    int(tu_block["min_confluence"])
+                    if tu_block.get("min_confluence") is not None
+                    else int(getattr(self.config, "MIN_CONFLUENCE", 3))
+                )
+                strict_tu_ok = (df["signal_strength"] >= tu_s) & (df["confluence_count_ict"] >= tu_c)
+            else:
+                strict_tu_ok = pd.Series(True, index=df.index)
+
+            allow = (~base_sig) | ((~is_range | strict_ok) & (~is_td | strict_td_ok) & (~is_tu | strict_tu_ok))
             gated = df["signal"].where(allow, 0).astype(int)
             removed = (df["signal"].astype(int) != 0) & (gated == 0)
 
@@ -217,12 +295,24 @@ class ICTEngine:
                 ~base_sig,
                 "flat",
                 np.where(
-                    ~is_range,
-                    "trend_allowed",
+                    gated.astype(int) != 0,
                     np.where(
-                        removed,
-                        "range_filtered_low_quality",
+                        is_range,
                         "range_allowed_strict",
+                        np.where(
+                            is_td,
+                            "trend_down_allowed_strict",
+                            np.where(is_tu, "trend_up_allowed_strict", "trend_allowed"),
+                        ),
+                    ),
+                    np.where(
+                        is_range,
+                        "range_filtered_low_quality",
+                        np.where(
+                            is_td,
+                            "trend_down_filtered_low_quality",
+                            np.where(is_tu, "trend_up_filtered_low_quality", "regime_filtered_low_quality"),
+                        ),
                     ),
                 ),
             )

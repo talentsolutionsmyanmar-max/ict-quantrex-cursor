@@ -14,7 +14,8 @@ Environment=SOCKETIO_ASYNC_MODE=eventlet
 Environment=TRUST_PROXY=1
 EnvironmentFile=-/home/trader/ict-backend/.env
 # Bind to localhost only; Caddy terminates TLS on 80/443.
-ExecStart=/home/trader/ict-backend/venv/bin/gunicorn --worker-class eventlet -w 1 --bind 127.0.0.1:5050 --access-logfile - --error-logfile - wsgi:app
+# --timeout: default 30s kills long /api/backtest and research calls (browser sees empty body → JSON parse error).
+ExecStart=/home/trader/ict-backend/venv/bin/gunicorn --worker-class eventlet -w 1 --timeout 300 --bind 127.0.0.1:5050 --access-logfile - --error-logfile - wsgi:app
 Restart=always
 RestartSec=5
 

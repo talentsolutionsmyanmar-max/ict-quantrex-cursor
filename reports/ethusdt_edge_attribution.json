@@ -1,0 +1,14 @@
+{
+  "trend_up": {
+    "trades": 4,
+    "pf": 0.696,
+    "expectancy_r": -0.062,
+    "action": "DISABLE"
+  },
+  "trend_down": {
+    "trades": 22,
+    "pf": 2.75,
+    "expectancy_r": 0.086,
+    "action": "SCALE"
+  }
+}

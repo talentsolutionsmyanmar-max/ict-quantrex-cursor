@@ -1,0 +1,290 @@
+{
+  "batch": true,
+  "windows": [
+    {
+      "window": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "start": "2024-01-01",
+        "end": "2024-03-31",
+        "capital": 10000.0
+      },
+      "summary": {
+        "closed_trades": 2,
+        "expectancy": 5.42,
+        "max_drawdown_pct": -0.09,
+        "win_rate": 100.0,
+        "profit_factor": 999.0
+      },
+      "sl": {
+        "count": 0,
+        "hit_rate_closed": 0.0,
+        "avg_sl_loss": 0.0
+      },
+      "tp": {
+        "TP1": {
+          "count": 1,
+          "rate_closed": 0.5,
+          "avg_pnl": 6.454146020074205,
+          "win_rate": 1.0
+        },
+        "TP2": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        },
+        "TP3": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "by_regime": {
+        "ranging": {
+          "trades": 2,
+          "expectancy": 5.419927155891102,
+          "max_drawdown_pnl": 4.385708291707999,
+          "win_rate": 100.0
+        }
+      },
+      "entry_depth": {
+        "unique_entries_total": 1,
+        "unique_entries_by_regime_state": {
+          "ranging": 1
+        },
+        "pct_unique_entries_in_ranging": 100.0
+      },
+      "label": "2024-Q1"
+    },
+    {
+      "window": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "start": "2024-04-01",
+        "end": "2024-06-30",
+        "capital": 10000.0
+      },
+      "summary": {
+        "closed_trades": 2,
+        "expectancy": 4.79,
+        "max_drawdown_pct": -0.06,
+        "win_rate": 100.0,
+        "profit_factor": 999.0
+      },
+      "sl": {
+        "count": 0,
+        "hit_rate_closed": 0.0,
+        "avg_sl_loss": 0.0
+      },
+      "tp": {
+        "TP1": {
+          "count": 1,
+          "rate_closed": 0.5,
+          "avg_pnl": 4.718012276184794,
+          "win_rate": 1.0
+        },
+        "TP2": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        },
+        "TP3": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "by_regime": {
+        "ranging": {
+          "trades": 2,
+          "expectancy": 4.792502201275077,
+          "max_drawdown_pnl": 4.718012276184794,
+          "win_rate": 100.0
+        }
+      },
+      "entry_depth": {
+        "unique_entries_total": 1,
+        "unique_entries_by_regime_state": {
+          "ranging": 1
+        },
+        "pct_unique_entries_in_ranging": 100.0
+      },
+      "label": "2024-Q2"
+    },
+    {
+      "window": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "start": "2024-07-01",
+        "end": "2024-09-30",
+        "capital": 10000.0
+      },
+      "summary": {
+        "closed_trades": 1,
+        "expectancy": -1.44,
+        "max_drawdown_pct": -0.09,
+        "win_rate": 0.0,
+        "profit_factor": 1.0
+      },
+      "sl": {
+        "count": 0,
+        "hit_rate_closed": 0.0,
+        "avg_sl_loss": 0.0
+      },
+      "tp": {
+        "TP1": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        },
+        "TP2": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        },
+        "TP3": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "by_regime": {
+        "ranging": {
+          "trades": 1,
+          "expectancy": -1.440141087500398,
+          "max_drawdown_pnl": -1.440141087500398,
+          "win_rate": 0.0
+        }
+      },
+      "entry_depth": {
+        "unique_entries_total": 1,
+        "unique_entries_by_regime_state": {
+          "ranging": 1
+        },
+        "pct_unique_entries_in_ranging": 100.0
+      },
+      "label": "2024-Q3"
+    },
+    {
+      "window": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "start": "2024-10-01",
+        "end": "2024-12-31",
+        "capital": 10000.0
+      },
+      "summary": {
+        "closed_trades": 4,
+        "expectancy": -5.62,
+        "max_drawdown_pct": -0.41,
+        "win_rate": 50.0,
+        "profit_factor": 0.67
+      },
+      "sl": {
+        "count": 2,
+        "hit_rate_closed": 0.5,
+        "avg_sl_loss": -16.857037740361147
+      },
+      "tp": {
+        "TP1": {
+          "count": 1,
+          "rate_closed": 0.25,
+          "avg_pnl": 6.685945698243717,
+          "win_rate": 1.0
+        },
+        "TP2": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        },
+        "TP3": {
+          "count": 0,
+          "rate_closed": 0.0,
+          "avg_pnl": 0.0,
+          "win_rate": 0.0
+        }
+      },
+      "by_regime": {
+        "ranging": {
+          "trades": 4,
+          "expectancy": -5.620658029334338,
+          "max_drawdown_pnl": -17.59387626404324,
+          "win_rate": 50.0
+        }
+      },
+      "entry_depth": {
+        "unique_entries_total": 3,
+        "unique_entries_by_regime_state": {
+          "ranging": 3
+        },
+        "pct_unique_entries_in_ranging": 100.0
+      },
+      "label": "2024-Q4"
+    },
+    {
+      "window": {
+        "symbol": "BTCUSDT",
+        "timeframe": "15m",
+        "start": "2025-01-01",
+        "end": "2025-03-31",
+        "capital": 10000.0
+      },
+      "summary": {
+        "closed_trades": 6,
+        "expectancy": -2.66,
+        "max_drawdown_pct": -0.47,
+        "win_rate": 66.67,
+        "profit_factor": 0.46
+      },
+      "sl": {
+        "count": 1,
+        "hit_rate_closed": 0.16666666666666666,
+        "avg_sl_loss": -17.905119345374594
+      },
+      "tp": {
+        "TP1": {
+          "count": 1,
+          "rate_closed": 0.16666666666666666,
+          "avg_pnl": 3.701554454765318,
+          "win_rate": 1.0
+        },
+        "TP2": {
+          "count": 1,
+          "rate_closed": 0.16666666666666666,
+          "avg_pnl": 4.900199817572975,
+          "win_rate": 1.0
+        },
+        "TP3": {
+          "count": 1,
+          "rate_closed": 0.16666666666666666,
+          "avg_pnl": 5.499522498976815,
+          "win_rate": 1.0
+        }
+      },
+      "by_regime": {
+        "ranging": {
+          "trades": 6,
+          "expectancy": -2.6632708492272137,
+          "max_drawdown_pnl": -17.905119345374594,
+          "win_rate": 66.66666666666666
+        }
+      },
+      "entry_depth": {
+        "unique_entries_total": 4,
+        "unique_entries_by_regime_state": {
+          "ranging": 4
+        },
+        "pct_unique_entries_in_ranging": 100.0
+      },
+      "label": "2025-Q1"
+    }
+  ]
+}

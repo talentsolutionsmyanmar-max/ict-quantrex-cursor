@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for
+from flask import Flask, render_template, jsonify, request, redirect, url_for, Response
 from flask_socketio import SocketIO, emit
 from werkzeug.middleware.proxy_fix import ProxyFix
 import threading
@@ -13,10 +13,13 @@ from promotion_store import insert_promotion_decision, list_promotion_decisions
 from research_suggest import build_suggestion, config_snapshot
 from unusual_whales_client import UnusualWhalesClient
 from health_service import get_health_snapshot
+from monitoring.supabase_rest_logger import calculate_24h_paper_pnl, fetch_recent_trades, get_live_trades_row_count
+from core.live_market_feed import LiveMarketFeed
 from session_clock import get_session_state
 from strategy.load_spec import public_spec_dict
 from risk_engine import RiskEngine
 from trade_playbook import list_playbook_events
+from mmt_client import fetch_candles, fetch_orderbook, fetch_stats, fetch_vd, mmt_configured
 from research_lab import (
     walk_forward_oos,
     stress_crisis_windows,
@@ -33,6 +36,10 @@ import os
 import subprocess
 from pathlib import Path
 import re
+import time
+import uuid
+import json
+import sys
 
 ALLOWED_TIMEFRAMES = frozenset(
     {
@@ -73,6 +80,197 @@ trading_state = {
 config = build_config()
 paper_trader = None
 risk_engine = RiskEngine(config)
+BACKTEST_JOBS: dict[str, dict] = {}
+BACKTEST_JOBS_LOCK = threading.Lock()
+BACKTEST_JOB_TTL_SEC = 3600
+KZ_JOBS: dict[str, dict] = {}
+KZ_JOBS_LOCK = threading.Lock()
+KZ_JOB_TTL_SEC = 3600
+KZ_JOB_DIR = Path(__file__).resolve().parent / "data" / "kz_jobs"
+PID_FILE = Path("data/quantrex.pid")
+
+
+def is_paper_running() -> bool:
+    """Check standalone paper trader process health from PID file."""
+    try:
+        pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+        if os.name == "nt":
+            probe = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            out = (probe.stdout or "").strip()
+            running = bool(out) and "No tasks are running" not in out
+            if not running and PID_FILE.exists():
+                PID_FILE.unlink()
+            return running
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, FileNotFoundError, ValueError, PermissionError, OSError):
+        try:
+            if PID_FILE.exists():
+                PID_FILE.unlink()
+        except Exception:
+            pass
+        return False
+
+
+def _clean_backtest_jobs() -> None:
+    cutoff = time.time() - BACKTEST_JOB_TTL_SEC
+    with BACKTEST_JOBS_LOCK:
+        stale = [
+            jid
+            for jid, job in BACKTEST_JOBS.items()
+            if job.get("state") in {"done", "failed"} and float(job.get("updated_at", 0.0)) < cutoff
+        ]
+        for jid in stale:
+            BACKTEST_JOBS.pop(jid, None)
+
+
+def _build_backtest_response(payload: dict) -> dict:
+    # Fresh spec + in-session genes (Apply from Research lab), then request overrides.
+    run_config = build_config()
+    copy_research_genes(config, run_config)
+    if "start_date" in payload:
+        run_config.BACKTEST_START_DATE = payload["start_date"]
+    if "end_date" in payload:
+        run_config.BACKTEST_END_DATE = payload["end_date"]
+    if "initial_capital" in payload:
+        run_config.INITIAL_CAPITAL = float(payload["initial_capital"])
+    if "symbol" in payload and payload["symbol"]:
+        run_config.SYMBOL = str(payload["symbol"]).upper().replace("/", "")
+    tf = payload.get("timeframe") or payload.get("interval")
+    if tf and str(tf) in ALLOWED_TIMEFRAMES:
+        run_config.TIMEFRAME = str(tf)
+    if payload.get("min_signal_strength") is not None:
+        try:
+            run_config.MIN_SIGNAL_STRENGTH = float(payload["min_signal_strength"])
+        except (TypeError, ValueError):
+            pass
+    if payload.get("min_confluence") is not None:
+        try:
+            run_config.MIN_CONFLUENCE = int(payload["min_confluence"])
+        except (TypeError, ValueError):
+            pass
+
+    # API backtests should stay quiet to avoid log spam slowing requests under Gunicorn.
+    results = Backtester(run_config).run(verbose=False)
+    # Ensure diagnostics print immediately (debug server + reloader can buffer stdout)
+    try:
+        subprocess.run(["/bin/sh", "-lc", "true"], check=False)
+    except Exception:
+        pass
+
+    df = results["df"].copy()
+    signals_df = df[["signal", "signal_strength"]].tail(100).copy()
+
+    n = len(df)
+    step = max(1, n // 800)
+    chart_slice = df.iloc[::step]
+    price_bars = []
+    for _, row in chart_slice.iterrows():
+        ts = row["timestamp"]
+        ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+        price_bars.append(
+            {
+                "t": ts_str,
+                "o": float(row["open"]),
+                "h": float(row["high"]),
+                "l": float(row["low"]),
+                "c": float(row["close"]),
+            }
+        )
+
+    eq = results["equity_curve"]
+    equity_sample = eq[:: max(1, len(eq) // 400)] if eq else []
+
+    regime = detect_regime(df)
+    try:
+        run_id = insert_run(
+            symbol=run_config.SYMBOL,
+            timeframe=run_config.TIMEFRAME,
+            start_date=run_config.BACKTEST_START_DATE,
+            end_date=run_config.BACKTEST_END_DATE,
+            initial_capital=float(run_config.INITIAL_CAPITAL),
+            regime=regime,
+            metrics=results["metrics"],
+            config_snapshot=config_snapshot(run_config),
+        )
+    except Exception as persist_err:
+        run_id = None
+        print(f"Run store warning: {persist_err}")
+
+    return {
+        "success": True,
+        "run_id": run_id,
+        "regime": regime,
+        "metrics": results["metrics"],
+        "trades": results["trades"][-20:],
+        "equity_curve": equity_sample,
+        "signals": signals_df.to_dict("records"),
+        "price_bars": price_bars,
+        "meta": {
+            "symbol": run_config.SYMBOL,
+            "timeframe": run_config.TIMEFRAME,
+        },
+    }
+
+
+def _run_backtest_job(job_id: str, payload: dict) -> None:
+    with BACKTEST_JOBS_LOCK:
+        job = BACKTEST_JOBS.get(job_id)
+        if not job:
+            return
+        job["state"] = "running"
+        job["updated_at"] = time.time()
+    try:
+        result = _build_backtest_response(payload)
+        with BACKTEST_JOBS_LOCK:
+            job = BACKTEST_JOBS.get(job_id)
+            if job:
+                job["state"] = "done"
+                job["result"] = result
+                job["updated_at"] = time.time()
+    except Exception as e:
+        with BACKTEST_JOBS_LOCK:
+            job = BACKTEST_JOBS.get(job_id)
+            if job:
+                job["state"] = "failed"
+                job["error"] = str(e)
+                job["updated_at"] = time.time()
+
+
+def _kz_job_path(job_id: str) -> Path:
+    return KZ_JOB_DIR / f"{job_id}.json"
+
+
+def _write_kz_job(job_id: str, payload: dict) -> None:
+    KZ_JOB_DIR.mkdir(parents=True, exist_ok=True)
+    _kz_job_path(job_id).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _read_kz_job(job_id: str) -> dict | None:
+    p = _kz_job_path(job_id)
+    if not p.is_file():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _clean_kz_jobs() -> None:
+    KZ_JOB_DIR.mkdir(parents=True, exist_ok=True)
+    cutoff = time.time() - KZ_JOB_TTL_SEC
+    for p in KZ_JOB_DIR.glob("*.json"):
+        try:
+            st = json.loads(p.read_text(encoding="utf-8"))
+            if st.get("state") in {"done", "failed"} and float(st.get("updated_at", 0.0)) < cutoff:
+                p.unlink(missing_ok=True)
+        except Exception:
+            continue
 
 
 def start_paper_trading_internal():
@@ -133,90 +331,102 @@ def live_action_short():
     return redirect(url_for("live_watch"), code=302)
 
 
+_STUB_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{title}</title>
+<style>body{{font-family:system-ui,Segoe UI,sans-serif;background:#0b0f14;color:#e8eef5;
+max-width:52rem;margin:2rem auto;padding:0 1.2rem;line-height:1.5}}
+a{{color:#5ec8ff}}code{{background:#121922;padding:0.1rem 0.35rem;border-radius:4px}}</style>
+</head><body>
+<h1>{title}</h1>
+<p>{body}</p>
+<p><a href="/">Open dashboard</a> · <a href="/live">Live watch</a></p>
+</body></html>"""
+
+
+@app.route("/features")
+def stub_features():
+    """Avoid bare 404 on this host; marketing site may live elsewhere."""
+    html = _STUB_HTML.format(
+        title="QuantRex — Features",
+        body="This Flask host serves the trading dashboard and APIs. Product marketing pages "
+        "may be on your main domain. For order-flow visualization stacks, compare dedicated "
+        "tools (e.g. MMT: <a href=\"https://mmt.gg/\">mmt.gg</a>) with what you integrate via "
+        "<code>/api/mmt/*</code> on the backend.",
+    )
+    return Response(html, mimetype="text/html")
+
+
+@app.route("/pricing")
+def stub_pricing():
+    html = _STUB_HTML.format(
+        title="QuantRex — Pricing",
+        body="Pricing is not served from this engine host. Use your public site or billing "
+        "provider. This server exposes APIs such as <code>/api/health</code> and "
+        "<code>/api/strategy-spec</code> for operators.",
+    )
+    return Response(html, mimetype="text/html")
+
+
 @app.route("/api/backtest", methods=["POST"])
 def run_backtest():
     """Run backtest and return results"""
     try:
         payload = request.get_json(silent=True) or {}
-
-        # Fresh spec + in-session genes (Apply from Research lab), then request overrides.
-        run_config = build_config()
-        copy_research_genes(config, run_config)
-        if "start_date" in payload:
-            run_config.BACKTEST_START_DATE = payload["start_date"]
-        if "end_date" in payload:
-            run_config.BACKTEST_END_DATE = payload["end_date"]
-        if "initial_capital" in payload:
-            run_config.INITIAL_CAPITAL = float(payload["initial_capital"])
-        if "symbol" in payload and payload["symbol"]:
-            run_config.SYMBOL = str(payload["symbol"]).upper().replace("/", "")
-        tf = payload.get("timeframe") or payload.get("interval")
-        if tf and str(tf) in ALLOWED_TIMEFRAMES:
-            run_config.TIMEFRAME = str(tf)
-
-        results = Backtester(run_config).run()
-        # Ensure diagnostics print immediately (debug server + reloader can buffer stdout)
-        try:
-            subprocess.run(["/bin/sh", "-lc", "true"], check=False)
-        except Exception:
-            pass
-
-        df = results["df"].copy()
-        signals_df = df[["signal", "signal_strength"]].tail(100).copy()
-
-        n = len(df)
-        step = max(1, n // 800)
-        chart_slice = df.iloc[::step]
-        price_bars = []
-        for _, row in chart_slice.iterrows():
-            ts = row["timestamp"]
-            ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
-            price_bars.append(
-                {
-                    "t": ts_str,
-                    "o": float(row["open"]),
-                    "h": float(row["high"]),
-                    "l": float(row["low"]),
-                    "c": float(row["close"]),
-                }
-            )
-
-        eq = results["equity_curve"]
-        equity_sample = eq[:: max(1, len(eq) // 400)] if eq else []
-
-        regime = detect_regime(df)
-        try:
-            run_id = insert_run(
-                symbol=run_config.SYMBOL,
-                timeframe=run_config.TIMEFRAME,
-                start_date=run_config.BACKTEST_START_DATE,
-                end_date=run_config.BACKTEST_END_DATE,
-                initial_capital=float(run_config.INITIAL_CAPITAL),
-                regime=regime,
-                metrics=results["metrics"],
-                config_snapshot=config_snapshot(run_config),
-            )
-        except Exception as persist_err:
-            run_id = None
-            print(f"Run store warning: {persist_err}")
-
-        response = {
-            "success": True,
-            "run_id": run_id,
-            "regime": regime,
-            "metrics": results["metrics"],
-            "trades": results["trades"][-20:],
-            "equity_curve": equity_sample,
-            "signals": signals_df.to_dict("records"),
-            "price_bars": price_bars,
-            "meta": {
-                "symbol": run_config.SYMBOL,
-                "timeframe": run_config.TIMEFRAME,
-            },
-        }
-        return jsonify(response)
+        return jsonify(_build_backtest_response(payload))
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/backtest/start", methods=["POST"])
+def api_backtest_start():
+    """Queue a backtest job and return immediately for timeout-safe polling."""
+    payload = request.get_json(silent=True) or {}
+    _clean_backtest_jobs()
+    with BACKTEST_JOBS_LOCK:
+        running = sum(1 for j in BACKTEST_JOBS.values() if j.get("state") == "running")
+        if running >= 1:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Another backtest is already running. Wait for it to finish.",
+                    }
+                ),
+                429,
+            )
+        job_id = uuid.uuid4().hex[:12]
+        BACKTEST_JOBS[job_id] = {
+            "state": "queued",
+            "created_at": time.time(),
+            "updated_at": time.time(),
+            "result": None,
+            "error": None,
+        }
+    thread = threading.Thread(target=_run_backtest_job, args=(job_id, payload), daemon=True)
+    thread.start()
+    return jsonify({"success": True, "job_id": job_id, "status_url": f"/api/backtest/status/{job_id}"})
+
+
+@app.route("/api/backtest/status/<job_id>")
+def api_backtest_status(job_id: str):
+    with BACKTEST_JOBS_LOCK:
+        job = BACKTEST_JOBS.get(job_id)
+        if not job:
+            return jsonify({"success": False, "error": "Backtest job not found"}), 404
+        state = job.get("state")
+        out = {
+            "success": True,
+            "job_id": job_id,
+            "state": state,
+            "created_at": job.get("created_at"),
+            "updated_at": job.get("updated_at"),
+        }
+        if state == "done":
+            out["result"] = job.get("result")
+        elif state == "failed":
+            out["error"] = job.get("error") or "Backtest failed"
+    return jsonify(out)
 
 
 @app.route("/api/paper/start", methods=["POST"])
@@ -276,6 +486,43 @@ def api_health():
     return jsonify({"success": True, **snap})
 
 
+@app.route("/live-monitor")
+def live_monitor():
+    """Lightweight JSON monitor for v2.6 micro deployment checks."""
+    running = is_paper_running()
+    live_price = None
+    try:
+        live_price = float(LiveMarketFeed(symbol="BTC/USDT", timeframe=str(config.TIMEFRAME)).fetch_current_price())
+    except Exception:
+        live_price = None
+    recent = fetch_recent_trades(limit=5)
+    rec_out = []
+    for r in recent:
+        rec_out.append(
+            {
+                "timestamp": r.get("timestamp"),
+                "symbol": r.get("symbol"),
+                "side": r.get("side", ""),
+                "entry": r.get("entry_price"),
+                "exit": r.get("exit_price"),
+                "r": r.get("r_multiple"),
+                "reason": r.get("exit_reason", r.get("exit_type")),
+            }
+        )
+    return jsonify(
+        {
+            "success": True,
+            "live_price": live_price,
+            "paper_pnl_24h": calculate_24h_paper_pnl(),
+            "active_position": None,
+            "recent_trades": rec_out,
+            "paper_running": running,
+            "mode": "LIVE_PAPER" if running else "PAPER_IDLE",
+            "live_trades_row_count": int(get_live_trades_row_count()),
+        }
+    )
+
+
 @app.route("/api/alerts/status")
 def api_alerts_status():
     """Whether Telegram / webhook env vars are set (no secrets returned)."""
@@ -320,6 +567,124 @@ def api_alerts_test_telegram():
 @app.route("/api/session")
 def api_session():
     return jsonify({"success": True, "session": get_session_state()})
+
+
+def _mmt_proxy_authorized() -> bool:
+    expected = (os.getenv("MMT_PROXY_SECRET", "") or "").strip()
+    if not expected:
+        return False
+    got = request.headers.get("X-MMT-Proxy-Secret", "").strip()
+    if not got:
+        payload = request.get_json(silent=True) or {}
+        got = str(payload.get("secret", "")).strip()
+    return got == expected
+
+
+@app.route("/api/mmt/status")
+def api_mmt_status():
+    """Whether MMT integration is configured (no secrets returned)."""
+    return jsonify(
+        {
+            "success": True,
+            "mmt_configured": bool(mmt_configured()),
+            "docs": "https://docs.mmt.gg/api/quickstart",
+            "note": "Set MMT_API_KEY on the server. Use POST /api/mmt/* with X-MMT-Proxy-Secret matching MMT_PROXY_SECRET. "
+            "Paper OPEN can attach binance_public_entry (free REST), mmt_stats_entry / mmt_vd_entry when those blocks are enabled in spec.",
+        }
+    )
+
+
+@app.route("/api/mmt/candles", methods=["POST"])
+def api_mmt_candles():
+    if not mmt_configured():
+        return jsonify({"success": False, "error": "Set MMT_API_KEY in server .env"}), 503
+    if not _mmt_proxy_authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    ex = str(body.get("exchange", "")).strip()
+    sym = str(body.get("symbol", "")).strip()
+    tf = str(body.get("tf", "")).strip()
+    try:
+        frm = int(body.get("from"))
+        to = int(body.get("to"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "from/to must be unix seconds integers"}), 400
+    if tf not in ALLOWED_TIMEFRAMES:
+        return jsonify({"success": False, "error": f"Unsupported tf {tf!r}"}), 400
+    out = fetch_candles(exchange=ex, symbol=sym, tf=tf, frm=frm, to=to)
+    st = 502 if not out.get("success") else 200
+    return jsonify(out), st
+
+
+@app.route("/api/mmt/orderbook", methods=["POST"])
+def api_mmt_orderbook():
+    if not mmt_configured():
+        return jsonify({"success": False, "error": "Set MMT_API_KEY in server .env"}), 503
+    if not _mmt_proxy_authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    ex = str(body.get("exchange", "")).strip()
+    sym = str(body.get("symbol", "")).strip()
+    try:
+        levels = int(body.get("levels", 200))
+    except (TypeError, ValueError):
+        levels = 200
+    out = fetch_orderbook(exchange=ex, symbol=sym, levels=levels)
+    st = 502 if not out.get("success") else 200
+    return jsonify(out), st
+
+
+@app.route("/api/mmt/stats", methods=["POST"])
+def api_mmt_stats():
+    if not mmt_configured():
+        return jsonify({"success": False, "error": "Set MMT_API_KEY in server .env"}), 503
+    if not _mmt_proxy_authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    ex = str(body.get("exchange", "")).strip()
+    sym = str(body.get("symbol", "")).strip()
+    tf = str(body.get("tf", "")).strip()
+    try:
+        frm = int(body.get("from"))
+        to = int(body.get("to"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "from/to must be unix seconds integers"}), 400
+    if tf not in ALLOWED_TIMEFRAMES:
+        return jsonify({"success": False, "error": f"Unsupported tf {tf!r}"}), 400
+    try:
+        tmo = float(body.get("timeout_sec", 20))
+    except (TypeError, ValueError):
+        tmo = 20.0
+    out = fetch_stats(exchange=ex, symbol=sym, tf=tf, frm=frm, to=to, timeout_sec=tmo)
+    st = 502 if not out.get("success") else 200
+    return jsonify(out), st
+
+
+@app.route("/api/mmt/vd", methods=["POST"])
+def api_mmt_vd():
+    if not mmt_configured():
+        return jsonify({"success": False, "error": "Set MMT_API_KEY in server .env"}), 503
+    if not _mmt_proxy_authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    ex = str(body.get("exchange", "")).strip()
+    sym = str(body.get("symbol", "")).strip()
+    tf = str(body.get("tf", "")).strip()
+    try:
+        frm = int(body.get("from"))
+        to = int(body.get("to"))
+        bucket = int(body.get("bucket", 1))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "from/to/bucket must be integers"}), 400
+    if tf not in ALLOWED_TIMEFRAMES:
+        return jsonify({"success": False, "error": f"Unsupported tf {tf!r}"}), 400
+    try:
+        tmo = float(body.get("timeout_sec", 20))
+    except (TypeError, ValueError):
+        tmo = 20.0
+    out = fetch_vd(exchange=ex, symbol=sym, tf=tf, frm=frm, to=to, bucket=bucket, timeout_sec=tmo)
+    st = 502 if not out.get("success") else 200
+    return jsonify(out), st
 
 
 @app.route("/api/strategy-spec")
@@ -595,80 +960,90 @@ def api_research_evolution_status():
     Reads last lines from `evolution_run.log` if present; otherwise falls back to
     `journalctl -u ict-evolution` so systemd runs are also visible.
     """
+    _TAIL_MAX = 40000  # keep JSON small; avoids truncated responses behind proxies
     try:
-        lines = int(request.args.get("lines", 80))
-    except ValueError:
-        lines = 80
-    lines = max(10, min(lines, 300))
-
-    repo_root = Path(__file__).resolve().parent
-    file_path = repo_root / "evolution_run.log"
-
-    text = ""
-    source = "none"
-    if file_path.exists():
         try:
-            all_lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-            text = "\n".join(all_lines[-lines:])
-            source = "file"
-        except Exception:
-            text = ""
+            lines = int(request.args.get("lines", 80))
+        except ValueError:
+            lines = 80
+        lines = max(10, min(lines, 300))
 
-    if not text:
-        try:
-            cmd = ["journalctl", "-u", "ict-evolution.service", "-n", str(lines), "--no-pager", "-o", "cat"]
-            r = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            text = r.stdout.strip()
-            source = "journalctl"
-        except Exception:
-            text = ""
+        repo_root = Path(__file__).resolve().parent
+        file_path = repo_root / "evolution_run.log"
 
-    phase = "unknown"
-    latest_generation = None
-    latest_generation_total = None
-    best_fitness = None
+        text = ""
+        source = "none"
+        if file_path.exists():
+            try:
+                all_lines = file_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                text = "\n".join(all_lines[-lines:])
+                source = "file"
+            except Exception:
+                text = ""
 
-    if text:
-        if "RANK1_GENES_START" in text or "RANK1_GENES_END" in text:
-            phase = "apply_rank1"
-        elif "crisis verification" in text.lower() or "crisis verification top_k" in text:
-            phase = "crisis"
-        elif "AGGREGATE_START" in text or "AGGREGATE_END" in text:
-            phase = "verifying"
-        else:
-            phase = "evolving"
+        if not text:
+            try:
+                cmd = ["journalctl", "-u", "ict-evolution.service", "-n", str(lines), "--no-pager", "-o", "cat"]
+                r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                text = r.stdout.strip()
+                source = "journalctl"
+            except Exception:
+                text = ""
 
-        m = re.findall(r"\[evolution\]\s+generation\s+(\d+)/(\d+)", text)
-        if m:
-            latest_generation, latest_generation_total = m[-1]
+        phase = "unknown"
+        latest_generation = None
+        latest_generation_total = None
+        best_fitness = None
 
-        bf = re.findall(r"best_fitness=([-+]?\d*\.?\d+)", text)
-        if bf:
-            best_fitness = bf[-1]
+        if text:
+            if "RANK1_GENES_START" in text or "RANK1_GENES_END" in text:
+                phase = "apply_rank1"
+            elif "crisis verification" in text.lower() or "crisis verification top_k" in text:
+                phase = "crisis"
+            elif "AGGREGATE_START" in text or "AGGREGATE_END" in text:
+                phase = "verifying"
+            else:
+                phase = "evolving"
 
-    regime_train_snip = None
-    regime_gate_enabled_hint = None
-    if text:
-        rmt = re.findall(r"\[evolution\]\s+regime_train\s+(.+)", text)
-        if rmt:
-            regime_train_snip = rmt[-1].strip()
-        rge = re.findall(r"\[evolution\]\s+regime_gate_enabled=(True|False)", text)
-        if rge:
-            regime_gate_enabled_hint = rge[-1] == "True"
+            m = re.findall(r"\[evolution\]\s+generation\s+(\d+)/(\d+)", text)
+            if m:
+                latest_generation, latest_generation_total = m[-1]
 
-    return jsonify(
-        {
-            "success": True,
-            "source": source,
-            "phase": phase,
-            "latest_generation": latest_generation,
-            "latest_generation_total": latest_generation_total,
-            "best_fitness": best_fitness,
-            "regime_train_snip": regime_train_snip,
-            "regime_gate_enabled_hint": regime_gate_enabled_hint,
-            "tail": text,
-        }
-    )
+            bf = re.findall(r"best_fitness=([-+]?\d*\.?\d+)", text)
+            if bf:
+                best_fitness = bf[-1]
+
+        regime_train_snip = None
+        regime_gate_enabled_hint = None
+        if text:
+            rmt = re.findall(r"\[evolution\]\s+regime_train\s+(.+)", text)
+            if rmt:
+                regime_train_snip = rmt[-1].strip()
+            rge = re.findall(r"\[evolution\]\s+regime_gate_enabled=(True|False)", text)
+            if rge:
+                regime_gate_enabled_hint = rge[-1] == "True"
+
+        tail_truncated = False
+        if len(text) > _TAIL_MAX:
+            text = text[-_TAIL_MAX:]
+            tail_truncated = True
+
+        return jsonify(
+            {
+                "success": True,
+                "source": source,
+                "phase": phase,
+                "latest_generation": latest_generation,
+                "latest_generation_total": latest_generation_total,
+                "best_fitness": best_fitness,
+                "regime_train_snip": regime_train_snip,
+                "regime_gate_enabled_hint": regime_gate_enabled_hint,
+                "tail": text,
+                "tail_truncated": tail_truncated,
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "tail": ""}), 500
 
 
 @app.route("/api/research/kz-runs")
@@ -690,23 +1065,107 @@ def api_research_kz_runs():
 
 @app.route("/api/research/kz-run-now", methods=["POST"])
 def api_research_kz_run_now():
-    """Fire one KZ-style research job immediately (same pipeline as exit trigger, manual tag)."""
+    """Legacy alias: enqueue a KZ-style research job and return immediately."""
     body = request.get_json(silent=True) or {}
-    tag = str(body.get("tag") or "manual")
-    ze = body.get("zones_exited")
-    if ze is not None and not isinstance(ze, list):
-        return jsonify({"success": False, "error": "zones_exited must be a list"}), 400
-    out = run_kz_research_once(config, force_tag=tag, zones_exited=ze)
-    if out.get("skipped"):
-        return jsonify({"success": False, **out}), 409
+    _clean_kz_jobs()
+    existing = list(KZ_JOB_DIR.glob("*.json")) if KZ_JOB_DIR.exists() else []
+    for p in existing:
+        try:
+            st = json.loads(p.read_text(encoding="utf-8"))
+            if st.get("state") in {"queued", "running"}:
+                return jsonify({"success": False, "error": "Another KZ research job is already running."}), 429
+        except Exception:
+            continue
+    job_id = uuid.uuid4().hex[:12]
+    now = time.time()
+    _write_kz_job(
+        job_id,
+        {"state": "queued", "created_at": now, "updated_at": now, "result": None, "error": None},
+    )
+    runner_code = """
+import json, sys, time
+from pathlib import Path
+from config import build_config
+from kz_autoresearch import run_kz_research_once
+
+jobf = Path(sys.argv[1])
+p = json.loads(sys.argv[2])
+st = json.loads(jobf.read_text(encoding='utf-8'))
+st['state'] = 'running'
+st['updated_at'] = time.time()
+jobf.write_text(json.dumps(st), encoding='utf-8')
+try:
+    out = run_kz_research_once(
+        build_config(),
+        force_tag=str(p.get('tag') or 'manual'),
+        zones_exited=p.get('zones_exited') if isinstance(p.get('zones_exited'), list) else None,
+    )
+    res = {
+        'success': True,
+        'run_id': out.get('run_id'),
+        'trigger_tag': out.get('trigger_tag'),
+        'error': out.get('error'),
+        'decision_id': out.get('decision_id'),
+        'promotion': out.get('promotion'),
+    }
+    st = json.loads(jobf.read_text(encoding='utf-8'))
+    st['state'] = 'done'
+    st['result'] = res
+    st['updated_at'] = time.time()
+    jobf.write_text(json.dumps(st), encoding='utf-8')
+except Exception as e:
+    st = json.loads(jobf.read_text(encoding='utf-8'))
+    st['state'] = 'failed'
+    st['error'] = str(e)
+    st['updated_at'] = time.time()
+    jobf.write_text(json.dumps(st), encoding='utf-8')
+"""
+    subprocess.Popen(
+        [sys.executable, "-c", runner_code, str(_kz_job_path(job_id)), json.dumps(body)],
+        cwd=str(Path(__file__).resolve().parent),
+        start_new_session=True,
+    )
     return jsonify(
         {
             "success": True,
-            "run_id": out.get("run_id"),
-            "trigger_tag": out.get("trigger_tag"),
-            "error": out.get("error"),
+            "job_id": job_id,
+            "status_url": f"/api/research/kz-run-status/{job_id}",
         }
     )
+
+
+@app.route("/api/research/kz-run-start", methods=["POST"])
+def api_research_kz_run_start():
+    """Start async KZ autoresearch run (Karpathy loop + Gbrain gate)."""
+    body = request.get_json(silent=True) or {}
+    # same behavior as legacy alias, kept as explicit endpoint for clients
+    return api_research_kz_run_now()
+    return jsonify(
+        {
+            "success": True,
+            "job_id": job_id,
+            "status_url": f"/api/research/kz-run-status/{job_id}",
+        }
+    )
+
+
+@app.route("/api/research/kz-run-status/<job_id>")
+def api_research_kz_run_status(job_id: str):
+    job = _read_kz_job(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "KZ research job not found"}), 404
+    out = {
+        "success": True,
+        "job_id": job_id,
+        "state": job.get("state"),
+        "created_at": job.get("created_at"),
+        "updated_at": job.get("updated_at"),
+    }
+    if job.get("state") == "done":
+        out["result"] = job.get("result")
+    elif job.get("state") == "failed":
+        out["error"] = job.get("error")
+    return jsonify(out)
 
 
 @app.route("/api/research/promotion-decisions")

@@ -1,0 +1,91 @@
+{
+  "generated_at_utc": "2026-04-27T09:39:44.060417+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "symbol": null,
+  "timeframe": null,
+  "runs": [
+    {
+      "name": "baseline",
+      "overrides": {},
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "loosen_strength_68",
+      "overrides": {
+        "MIN_SIGNAL_STRENGTH": 68
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "loosen_confluence_2",
+      "overrides": {
+        "MIN_CONFLUENCE": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "loosen_both",
+      "overrides": {
+        "MIN_SIGNAL_STRENGTH": 68,
+        "MIN_CONFLUENCE": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    },
+    {
+      "name": "loosen_both_more",
+      "overrides": {
+        "MIN_SIGNAL_STRENGTH": 65,
+        "MIN_CONFLUENCE": 2
+      },
+      "metrics": {
+        "profit_factor": 1.06,
+        "max_drawdown": -0.43,
+        "expectancy": 2.29,
+        "total_trades": 29.0,
+        "unique_entries": 16.0,
+        "win_rate": 89.66,
+        "total_pnl": 66.45,
+        "sharpe_ratio": 0.05
+      }
+    }
+  ]
+}

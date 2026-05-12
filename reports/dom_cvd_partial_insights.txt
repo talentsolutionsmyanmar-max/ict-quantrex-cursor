@@ -1,0 +1,35 @@
+QUANTREX DOM/CVD PARTIAL INSIGHTS
+Generated: 2026-05-03 15:46 UTC
+DOM snapshots: 617 | Signal evaluations: 53
+============================================================
+
+DOM Data Coverage: 8.4 hours (617 snapshots)
+   Avg interval: 0.8 min (target: 15 min)
+
+LATEST DOM SNAPSHOT
+   Price: $78,822.55
+   Imbalance: -0.9255 (BEAR)
+   CVD Cumulative: -7.28
+   Walls Detected: 4
+      - ASK wall @ $78,822.56 (vol: 2.48)
+      - ASK wall @ $78,823.33 (vol: 0.18)
+      - ASK wall @ $78,824.28 (vol: 0.19)
+
+DOM BY REGIME (Merged with Signal Audit)
+   ranging      | Imb: -0.2394 +/-0.5804 | n=29
+
+DOM AT SIGNAL MOMENTS
+   SKIP   | Avg Imb: -0.2394 | Avg CVDd: +0.14 | n=53
+
+WALL PROXIMITY FILTER
+   When wall <1% away: SKIP rate = 100.0%
+   -> Walls may be a valid confluence filter (validate with more data)
+
+PRELIMINARY INSIGHTS (Partial Data)
+   - Transitional / mixed DOM (avg imbalance between neutral and strong thresholds)
+
+============================================================
+GOLDEN LOCK STATUS: v2.6.5 config UNCHANGED (read-only script)
+This is read-only analysis. No live system modifications.
+
+Full JSON output: C:\Users\the RECRUITER\Documents\Claude-Claw\ict-quantrex-cursor\reports\dom_cvd_partial_insights.json

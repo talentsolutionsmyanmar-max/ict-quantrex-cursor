@@ -7,7 +7,13 @@
 
 quantrex.solutions, www.quantrex.solutions {
 	# Socket.IO: long-polling + WebSocket upgrade; flush_interval helps some clients behind TLS.
+	# Long read/write timeouts: backtests and evolution can exceed default proxy limits (empty body → JSON parse errors in the UI).
 	reverse_proxy 127.0.0.1:5050 {
 		flush_interval -1
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+			dial_timeout 15s
+		}
 	}
 }

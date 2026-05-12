@@ -243,6 +243,35 @@ python scripts/chief_qe_sweep.py | tee chief_qe.log
 
 Optional env overrides: `START_DATE`, `END_DATE`, `TIMEFRAME`, `N_WINDOWS`, `FRICTION_MULT`, `SYMBOLS` (comma-separated), `GENES_JSON`.
 
+### 7c) Budget mode (small VPS, no upgrade needed)
+
+Use this profile on 1vCPU/2GB:
+- Daytime: keep dashboard + paper loop stable
+- Night: run lighter research automatically once per day
+
+```bash
+cd ~/ict-quantrex-cursor
+chmod +x deploy/vps/budget-mode-install.sh
+bash deploy/vps/budget-mode-install.sh
+```
+
+What it installs:
+
+- **If `sudo` works without a password** (NOPASSWD): systemd `ict-nightly-research-lite.service` + `.timer` (daily off-peak).
+- **If you only have SSH key login and no sudo password**: a **user crontab** line instead (same script, no root).
+
+Always: `deploy/vps/run-nightly-research-lite.sh` (low-load defaults).
+
+Quick checks:
+
+```bash
+curl -s http://127.0.0.1:5050/api/health
+curl -s http://127.0.0.1:5050/api/paper/status
+crontab -l | grep nightly-research-lite || sudo systemctl list-timers ict-nightly-research-lite.timer --no-pager
+tail -n 120 logs/nightly-research-lite-latest.log
+tail -n 120 logs/cron-nightly.log
+```
+
 ### 7b2) Weekly automation on the VPS (systemd timer)
 
 Runs `scripts/chief_qe_sweep.py` every **Sunday 02:00 UTC** (±15 min jitter), logs under `logs/weekly-qe-*.log`. Default symbols: **SOL/ETH/BTC** (set `SYMBOLS` in `.env` to override).

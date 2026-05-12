@@ -1,0 +1,20 @@
+exits:
+  stop_loss_r: 1.0
+  min_r_to_close_any: 1.2
+  tp_ladder:
+    - at_r: 0.8
+      close_pct: 0.20
+    - at_r: 1.8
+      close_pct: 0.30
+    - at_r: 3.0
+      close_pct: 0.30
+  trail:
+    activate_after_r: 2.5
+    trail_distance_r: 0.8
+    only_in_trend_regimes: true
+    trail_type: "chandelier"
+
+risk:
+  risk_per_trade: 0.010
+  volatility_targeting: 0.20
+  max_portfolio_heat: 0.025

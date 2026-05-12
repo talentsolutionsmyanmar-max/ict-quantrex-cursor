@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-04-27T20:57:42Z",
+  "entries_24h": 0,
+  "skips_24h": 0,
+  "portfolio_pf": 0.0,
+  "top_skip_reasons": {},
+  "status": "FAIL",
+  "reason": "zero_signals_24h"
+}

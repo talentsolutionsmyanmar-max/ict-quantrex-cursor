@@ -1,0 +1,52 @@
+{
+  "generated_at": "2026-05-03T15:46:10.900398+00:00",
+  "dom_snapshots": 617,
+  "signal_evaluations": 53,
+  "latest_dom": {
+    "ts": "2026-05-02 21:47:59.683922+00:00",
+    "symbol": "BTCUSDT",
+    "price": 78822.55,
+    "dom_imbalance": -0.9255,
+    "dom_bid_vol": 0.13,
+    "dom_ask_vol": 3.31,
+    "dom_walls": [
+      {
+        "side": "ask",
+        "price": 78822.56,
+        "vol": 2.4827,
+        "x_avg": 28.91
+      },
+      {
+        "side": "ask",
+        "price": 78823.33,
+        "vol": 0.1817,
+        "x_avg": 2.12
+      },
+      {
+        "side": "ask",
+        "price": 78824.28,
+        "vol": 0.19323,
+        "x_avg": 2.25
+      },
+      {
+        "side": "ask",
+        "price": 78825.96,
+        "vol": 0.19462,
+        "x_avg": 2.27
+      }
+    ],
+    "cvd_delta": -0.76,
+    "cvd_cumulative": -7.28,
+    "spread_bps": 0.0,
+    "depth_levels": 20
+  },
+  "regime_imbalance": {
+    "ranging": -0.2394344827586207
+  },
+  "signal_dom_correlation": {
+    "enter_avg_imbalance": null,
+    "skip_avg_imbalance": -0.23943448275862075
+  },
+  "wall_filter_effectiveness": 1.0,
+  "preliminary_recommendations": []
+}

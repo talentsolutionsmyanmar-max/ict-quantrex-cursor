@@ -34,6 +34,8 @@ _MAP: Dict[Tuple[str, str], str] = {
     ("ict", "ote_levels"): "OTE_LEVELS",
     ("risk", "initial_capital"): "INITIAL_CAPITAL",
     ("risk", "risk_per_trade"): "RISK_PER_TRADE",
+    ("risk", "sizing_method"): "SIZING_METHOD",
+    ("risk", "volatility_target_annual"): "VOLATILITY_TARGET_ANNUAL",
     ("risk", "atr_multiplier"): "ATR_MULTIPLIER",
     ("risk", "min_confluence"): "MIN_CONFLUENCE",
     ("risk", "min_signal_strength"): "MIN_SIGNAL_STRENGTH",
@@ -145,7 +147,15 @@ def apply_spec_to_config(cfg: Any, path: Optional[Path] = None) -> None:
     if not raw:
         return
     for section, fields in raw.items():
-        if section in ("spec_version", "meta", "sessions", "gates"):
+        if section in (
+            "spec_version",
+            "meta",
+            "sessions",
+            "gates",
+            "adaptation_gates",
+            "data_sources",
+            "hybrid_scoring",
+        ):
             continue
         if not isinstance(fields, dict):
             continue
@@ -168,6 +178,8 @@ def apply_spec_to_config(cfg: Any, path: Optional[Path] = None) -> None:
 _PUBLIC_KEYS = (
     "spec_version",
     "meta",
+    "adaptation_gates",
+    "data_sources",
     "market",
     "ict",
     "risk",
@@ -175,6 +187,7 @@ _PUBLIC_KEYS = (
     "backtest",
     "operations",
     "regime",
+    "pre_trade",
     "sessions",
     "gates",
     "walk_forward",
@@ -183,6 +196,7 @@ _PUBLIC_KEYS = (
     "observability",
     "evolution",
     "validation",
+    "hybrid_scoring",
 )
 
 

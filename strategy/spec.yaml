@@ -2,12 +2,51 @@
 # Restart Flask after edits. Secrets only in .env.
 # STRATEGY_SPEC_PATH overrides file path (relative to strategy/ or absolute).
 
-spec_version: 2.1
+spec_version: 2.2
 
 meta:
   name: "AutoResearchClaw ICT Core — Realism Hardened"
   description: "Deterministic ICT pipeline + dirty execution modeling for paper/live convergence"
   baseline_locked: "v1.8"
+
+# Phase 0 — data pipeline expansion (YAML-gated). Does not change ICT detector code paths when disabled.
+adaptation_gates:
+  phase_0_only: false
+  ict_logic_immutable: true
+  yaml_feature_flags: true
+  audit_trail_required: true
+
+data_sources:
+  primary:
+    ohlcv:
+      exchange: "binance"
+      grid_timeframe: "15m"
+      timeframes: ["15m", "1h", "4h", "1d"]
+  crypto_native:
+    on_chain:
+      enabled: false
+      provider: "glassnode"
+      api_key_env: "GLASSNODE_API_KEY"
+      metrics: ["nvt_ratio", "exchange_netflow", "whale_balance_change"]
+      frequency: "1h"
+    orderbook:
+      enabled: false
+      depth_levels: [5, 10, 20]
+      update_freq_ms: 100
+    sentiment:
+      enabled: false
+      provider: "gdelt"
+      frequency: "15m"
+      topics: ["bitcoin", "ethereum", "regulation"]
+  macro:
+    btc_dominance:
+      enabled: false
+      provider: "coinmetrics"
+      api_key_env: "COINMETRICS_API_KEY"
+    sp500:
+      enabled: false
+      provider: "yahoo_finance"
+      ticker: "^GSPC"
 
 market:
   symbol: "BTCUSDT"
@@ -20,7 +59,7 @@ market:
   allocation:
     method: "volatility_parity"
     max_concurrent_positions: 3
-    correlation_cap: 0.85
+    correlation_cap: 0.88
 
 ict:
   range_hours: 5
@@ -30,7 +69,7 @@ ict:
   fvg:
     method: "adaptive"
     min_gap_atr: 0.35
-    confirmation_candles: 2
+    confirmation_candles: 1
     mitigation_filter: true
     ignore_mitigated: true
   liquidity:
@@ -40,7 +79,7 @@ ict:
 
 risk:
   initial_capital: 10000
-  risk_per_trade: 0.005
+  risk_per_trade: 0.004
   atr_multiplier: 2.5
   min_confluence: 3
   min_signal_strength: 72
@@ -51,7 +90,7 @@ risk:
   volatility_target_annual: 0.15
 
 execution:
-  tp1_ratio: 1.0
+  tp1_ratio: 1.2
   tp2_ratio: 2.0
   tp3_ratio: 3.0
   tp1_pct: 0.5
@@ -79,6 +118,37 @@ operations:
   mode: "PAPER"
   log_every_fill: true
 
+# Pre-trade discipline + light microstructure context (paper playbook JSON).
+# This does not replace DOM/CVD tools — it documents intent and adds a tiny Binance depth snapshot when enabled.
+pre_trade:
+  enabled: true
+  log_binance_depth_snapshot: true
+  depth_levels: 50
+  depth_top_n: 20
+  checklist:
+    regime_ok: true
+    liquidity_map_reviewed: false
+    tape_or_cvd_aligned: false
+    emotional_state: "neutral"
+  # Free path: Binance public REST (no keys) — taker flow proxy + USDM funding / OI delta
+  binance_public_enrich:
+    enabled: true
+    agg_trades_limit: 400
+    timeout_sec: 1.5
+    oi_period: "5m"
+    oi_hist_limit: 3
+    include: ["flow", "premium", "oi"]
+  # Option A: MMT /stats (paid key). Keep disabled when using binance_public_enrich only.
+  mmt_enrich:
+    enabled: false
+    exchange: "binancef"
+    timeout_sec: 0.8
+    tf: "1m"
+    lookback_sec: 420
+    include: ["vb", "vs", "tb", "ts", "sk", "fr", "lb", "ls"]
+    vd_enabled: false
+    vd_bucket: 1
+
 regime:
   enabled: true
   method: "ensemble"
@@ -89,7 +159,7 @@ regime:
   ema_fast: 20
   ema_slow: 50
   persist_bars: 3
-  range_min_signal_strength: 78
+  range_min_signal_strength: 76
   range_min_confluence: 3
   regime_actions:
     ranging:
@@ -97,8 +167,20 @@ regime:
       require_fvg_confirmation: true
     trending:
       allow_pyramiding: false
-    high_vol:
+    # Iteration 1 (validation sprint): cut size + raise entry quality in bearish trends only.
+    trend_down:
+      reduce_position_size: 0.45
+      require_fvg_confirmation: true
+      min_signal_strength: 80
+      min_confluence: 4
+    # Iteration 2: symmetric throttle for bullish trend (multi-window pain was often trend_up legs).
+    trend_up:
       reduce_position_size: 0.5
+      require_fvg_confirmation: true
+      min_signal_strength: 78
+      min_confluence: 4
+    high_vol:
+      reduce_position_size: 0.45
       widen_stop_atr_multiplier: 3.0
 
 sessions:
@@ -123,7 +205,9 @@ gates:
   kill_switch: false
   min_liquidity_usd: 5000000
   max_funding_rate: 0.0005
-  correlation_cap_btc: 0.85
+  # Tuned from 0.85 -> 0.88 after eligibility sweep:
+  # restores ETH participation while keeping correlation control active.
+  correlation_cap_btc: 0.88
   # Optional tuning for market_gates.py (Binance public API, TTL cache)
   market_gate_cache_ttl_sec: 60
   correlation_klines_limit: 200
@@ -183,3 +267,30 @@ validation:
   business_rules:
     - "risk.max_drawdown > risk.max_daily_loss"
     - "backtest.end_date > backtest.start_date"
+    # Phase 0 data_sources discipline (documentary; enforce in scripts/validate_phase0_data.py when enabling flags)
+    - "not data_sources.crypto_native.on_chain.enabled or data_sources.crypto_native.on_chain.frequency in ['1h', '4h', '1d']"
+    # Phase 1 scaffold (documentary; no runtime evaluator in repo — scripts/tests enforce intent)
+    - "not hybrid_scoring.enabled or adaptation_gates.phase_0_only == false"
+    - "hybrid_scoring.weighting.ict + hybrid_scoring.weighting.trend_alignment + hybrid_scoring.weighting.nn_confidence == 1.0"
+
+# Phase 1 scaffolding — ALL GATES DISABLED BY DEFAULT
+# Do NOT flip enabled flags until phase_0_only == false AND dry-run confirms stability + ICT regression green.
+hybrid_scoring:
+  enabled: false
+  min_hybrid_threshold: 0.65
+  trend_network:
+    enabled: false
+    input_dim: 5
+    input_features: ["nvt_ratio", "exchange_netflow", "orderbook_imbalance", "spread_pct"]
+    hidden_layers: [32, 16]
+    output_activation: "tanh"
+  weighting:
+    ict: 0.60
+    trend_alignment: 0.25
+    nn_confidence: 0.15
+  confidence_sizing:
+    enabled: false
+    curve: "sigmoid"
+    midpoint: 0.75
+    steepness: 8.0
+    max_multiplier: 2.0

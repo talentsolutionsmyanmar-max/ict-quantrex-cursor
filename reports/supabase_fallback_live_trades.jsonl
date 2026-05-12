@@ -1,0 +1,1 @@
+{"mode": "fallback", "reason": "missing_env", "trade_id": "dryrun-test-1", "symbol": "BTCUSDT", "regime": "trend_down", "entry_price": 45000.0, "exit_price": 45100.0, "r_multiple": 0.2, "exit_reason": "DRY_RUN_TEST", "pnl_usd": 10.0, "timestamp": "2026-04-28T00:00:00Z", "paper_mode": true}

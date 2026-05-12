@@ -18,33 +18,63 @@ from ict_execution import (
     compute_sl_tp,
     confluence_breakdown,
     format_confluence_pretty,
+    position_size_risk,
+    regime_risk_overrides,
     trail_stop_price,
     unrealized_pnl,
 )
 from playbook_reason import entry_context_json_str, entry_snapshot, exit_narrative
 from trade_playbook import record_playbook_event
+from strategy.load_spec import read_raw_spec
+from core.signal_generator import should_open_position
+from core.exit_engine import apply_regime_exit_logic, calculate_r_multiple
 
 
 class Backtester:
-    def __init__(self, config: Config, *, record_playbook: bool = True):
+    def __init__(
+        self,
+        config: Config,
+        *,
+        record_playbook: bool = True,
+        sweep_trend_down_exits: Optional[Dict[str, Any]] = None,
+    ):
         self.config = config
         self.record_playbook = record_playbook
         self.ict = ICTEngine(config)
         self.data_handler = DataHandler(config)
+        self.sweep_trend_down_exits = sweep_trend_down_exits
         self.trades = []
         self.equity_curve = []
         self._pb_entry_json: Optional[str] = None
         self._pb_entry_text: Optional[str] = None
         self._entry_regime_state = "unknown"
         self._entry_regime_gate_allowed = True
+        self._active_max_candles = int(config.MAX_CANDLES_HOLD)
 
-    def run(self, *, verbose: bool = True) -> Dict:
-        """Run full backtest. Set verbose=False for research sweeps (no stdout spam)."""
-        if verbose:
-            print("🔄 Fetching historical data...")
-        df = self.data_handler.fetch_historical_data(
-            self.config.BACKTEST_START_DATE, self.config.BACKTEST_END_DATE
-        )
+    @staticmethod
+    def _max_candles_from_hours(hours: float, timeframe: str) -> int:
+        s = str(timeframe or "15m").strip().lower()
+        n = 15
+        if s.endswith("m") and s[:-1].isdigit():
+            n = int(s[:-1])
+        return max(1, int(float(hours) * 60.0 / max(n, 1)))
+
+    def run(self, *, verbose: bool = True, ohlcv_df: Optional[pd.DataFrame] = None) -> Dict:
+        """Run full backtest. Set verbose=False for research sweeps (no stdout spam).
+
+        ohlcv_df: optional preloaded OHLCV (e.g. from parquet) — still runs ICT; use
+        backtest_on_processed() to skip fetch+ICT when the dataframe is already processed.
+        """
+        if ohlcv_df is not None:
+            if verbose:
+                print("📂 Using preloaded OHLCV (set BINANCE_KLINES_PARQUET for file-based cache).")
+            df = ohlcv_df
+        else:
+            if verbose:
+                print("🔄 Fetching historical data...")
+            df = self.data_handler.fetch_historical_data(
+                self.config.BACKTEST_START_DATE, self.config.BACKTEST_END_DATE
+            )
 
         if verbose:
             print("🔍 Running ICT analysis...")
@@ -65,6 +95,19 @@ class Backtester:
             self._print_diagnostic(metrics)
 
         return {"df": df, "trades": self.trades, "metrics": metrics, "equity_curve": self.equity_curve}
+
+    def backtest_on_processed(self, df: pd.DataFrame, *, verbose: bool = False) -> Dict:
+        """Run simulation on an already ICT-processed dataframe (fast sweeps; no network)."""
+        self.trades = []
+        self.equity_curve = []
+        df2 = self._simulate_trades(df, verbose=verbose)
+        metrics = self._calculate_metrics(df2)
+        regime_summary = self._regime_summary(df2, self.trades)
+        if isinstance(metrics, dict):
+            metrics["regime_summary"] = regime_summary
+        if verbose:
+            self._print_diagnostic(metrics)
+        return {"df": df2, "trades": self.trades, "metrics": metrics, "equity_curve": self.equity_curve}
 
     @staticmethod
     def run_multi(
@@ -267,6 +310,7 @@ class Backtester:
         """
         df = df.copy()
         capital = float(self.config.INITIAL_CAPITAL)
+        raw_spec = read_raw_spec()
 
         # Position state
         position = 0  # 0: None, 1: Long, -1: Short
@@ -277,6 +321,9 @@ class Backtester:
         position_remaining = 1.0
         atr_at_entry = 0.0
         stop_at_entry = 0.0  # for risk sizing (matches live / ICT levels)
+        entry_qty = 0.0
+        high_since_entry = 0.0
+        low_since_entry = 0.0
 
         df["portfolio_value"] = capital
         df["position"] = 0
@@ -289,11 +336,43 @@ class Backtester:
             # === EXIT LOGIC (Check first) ===
             if position != 0:
                 candle_count = i - entry_i
+                high_since_entry = max(high_since_entry, float(row["high"]))
+                low_since_entry = min(low_since_entry, float(row["low"]))
+                regime_state = str(getattr(self, "_entry_regime_state", "unknown"))
+                exits_cfg = raw_spec.get("exits") if isinstance(raw_spec, dict) else {}
+                stop_distance = abs(float(entry_price) - float(stop_at_entry))
+                unrealized_r = 0.0
+                if stop_distance > 0:
+                    if position == 1:
+                        unrealized_r = (float(row["close"]) - float(entry_price)) / stop_distance
+                    else:
+                        unrealized_r = (float(entry_price) - float(row["close"])) / stop_distance
+                trade_state = {
+                    "entry_price": float(entry_price),
+                    "stop_price": float(stop_loss),
+                    "stop_distance": float(stop_distance),
+                    "direction": "long" if position == 1 else "short",
+                    "unrealized_r": float(unrealized_r),
+                    "high_since_entry": float(high_since_entry),
+                    "low_since_entry": float(low_since_entry),
+                }
+                merge = (
+                    self.sweep_trend_down_exits
+                    if self.sweep_trend_down_exits and str(regime_state) == "trend_down"
+                    else None
+                )
+                apply_regime_exit_logic(
+                    trade_state,
+                    exits_cfg if isinstance(exits_cfg, dict) else {},
+                    regime_state,
+                    regime_exits_merge=merge,
+                )
+                stop_loss = float(trade_state.get("stop_price", stop_loss))
 
                 # Time-based exit
-                if candle_count >= int(self.config.MAX_CANDLES_HOLD):
+                if candle_count >= int(self._active_max_candles):
                     pnl = self._close_position(
-                        float(row["close"]), position, entry_price, position_remaining, capital, stop_at_entry
+                        float(row["close"]), position, entry_price, position_remaining, entry_qty
                     )
                     capital += pnl
                     self._record_trade(
@@ -309,17 +388,20 @@ class Backtester:
                         capital_after=capital,
                         exit_row=row,
                         bars_in_trade=candle_count,
+                        stop_at_entry=float(stop_at_entry),
+                        exit_reason="TIME_EXIT",
                     )
                     position = 0
                     position_remaining = 1.0
+                    entry_qty = 0.0
                     self._clear_playbook_snap()
 
                 # Scale-out profit taking + stops only if still open
                 if position != 0 and position_remaining > 0:
                     # TP1: 50% at 1:1 R:R
-                    if position_remaining == 1.0 and check_tp_hit(position, row, tp1):
+                    if position_remaining == 1.0 and tp1 is not None and check_tp_hit(position, row, float(tp1)):
                         pnl = self._close_partial(
-                            position, float(row["close"]), entry_price, self.config.TP1_PCT, capital, stop_at_entry
+                            position, float(tp1), entry_price, self.config.TP1_PCT, entry_qty
                         )
                         capital += pnl
                         position_remaining = max(0.0, position_remaining - float(self.config.TP1_PCT))
@@ -336,12 +418,14 @@ class Backtester:
                             capital_after=capital,
                             exit_row=row,
                             bars_in_trade=candle_count,
+                            stop_at_entry=float(stop_at_entry),
+                            exit_reason="TP1",
                         )
 
                     # TP2: 30% at 2:1 R:R
-                    if position_remaining > 0 and position_remaining <= 0.50 and check_tp_hit(position, row, tp2):
+                    if position_remaining > 0 and position_remaining <= 0.50 and check_tp_hit(position, row, float(tp2)):
                         pnl = self._close_partial(
-                            position, float(row["close"]), entry_price, self.config.TP2_PCT, capital, stop_at_entry
+                            position, float(tp2), entry_price, self.config.TP2_PCT, entry_qty
                         )
                         capital += pnl
                         position_remaining = max(0.0, position_remaining - float(self.config.TP2_PCT))
@@ -358,12 +442,14 @@ class Backtester:
                             capital_after=capital,
                             exit_row=row,
                             bars_in_trade=candle_count,
+                            stop_at_entry=float(stop_at_entry),
+                            exit_reason="TP2",
                         )
 
                     # TP3: 20% at 3:1 R:R
-                    if position_remaining > 0 and position_remaining <= 0.20 and check_tp_hit(position, row, tp3):
+                    if position_remaining > 0 and position_remaining <= 0.20 and check_tp_hit(position, row, float(tp3)):
                         pnl = self._close_partial(
-                            position, float(row["close"]), entry_price, self.config.TP3_PCT, capital, stop_at_entry
+                            position, float(tp3), entry_price, self.config.TP3_PCT, entry_qty
                         )
                         capital += pnl
                         position_remaining = max(0.0, position_remaining - float(self.config.TP3_PCT))
@@ -380,18 +466,27 @@ class Backtester:
                             capital_after=capital,
                             exit_row=row,
                             bars_in_trade=candle_count,
+                            stop_at_entry=float(stop_at_entry),
+                            exit_reason="TP3",
                         )
                         if position_remaining <= 0:
                             position = 0
                             position_remaining = 1.0
+                            entry_qty = 0.0
                             self._clear_playbook_snap()
 
                     # Stop loss on remaining position
                     if position != 0 and position_remaining > 0 and check_sl_hit(position, row, stop_loss):
                         pnl = self._close_partial(
-                            position, float(row["close"]), entry_price, position_remaining, capital, stop_at_entry
+                            position, float(stop_loss), entry_price, position_remaining, entry_qty
                         )
                         capital += pnl
+                        if bool(trade_state.get("trail_active")):
+                            sl_exit_reason = "TRAIL_TIGHTEN_SL"
+                        elif bool(trade_state.get("breakeven_active")):
+                            sl_exit_reason = "BREAKEVEN_SL"
+                        else:
+                            sl_exit_reason = "SL_1.0"
                         self._record_trade(
                             entry_price,
                             float(row["close"]),
@@ -405,9 +500,12 @@ class Backtester:
                             capital_after=capital,
                             exit_row=row,
                             bars_in_trade=candle_count,
+                            stop_at_entry=float(stop_at_entry),
+                            exit_reason=sl_exit_reason,
                         )
                         position = 0
                         position_remaining = 1.0
+                        entry_qty = 0.0
                         self._clear_playbook_snap()
 
                     # Trailing stop (after TP1 hit)
@@ -420,7 +518,7 @@ class Backtester:
                         trail_stop = trail_stop_price(position, entry_price, atr_at_entry, row, self.config)
                         if check_sl_hit(position, row, trail_stop):
                             pnl = self._close_partial(
-                                position, float(row["close"]), entry_price, position_remaining, capital, stop_at_entry
+                                position, float(trail_stop), entry_price, position_remaining, entry_qty
                             )
                             capital += pnl
                             self._record_trade(
@@ -436,9 +534,12 @@ class Backtester:
                                 capital_after=capital,
                                 exit_row=row,
                                 bars_in_trade=candle_count,
+                                stop_at_entry=float(stop_at_entry),
+                                exit_reason="ATR_TRAIL_AFTER_TP1",
                             )
                             position = 0
                             position_remaining = 1.0
+                            entry_qty = 0.0
                             self._clear_playbook_snap()
 
                 # Signal reversal exit (early)
@@ -449,7 +550,7 @@ class Backtester:
                     and float(row.get("signal_strength", 0)) >= float(self.config.MIN_SIGNAL_STRENGTH)
                 ):
                     pnl = self._close_partial(
-                        position, float(row["close"]), entry_price, position_remaining, capital, stop_at_entry
+                        position, float(row["close"]), entry_price, position_remaining, entry_qty
                     )
                     capital += pnl
                     self._record_trade(
@@ -465,13 +566,20 @@ class Backtester:
                         capital_after=capital,
                         exit_row=row,
                         bars_in_trade=candle_count,
+                        stop_at_entry=float(stop_at_entry),
+                        exit_reason="SIGNAL_REVERSAL",
                     )
                     position = 0
                     position_remaining = 1.0
+                    entry_qty = 0.0
                     self._clear_playbook_snap()
 
             # === ENTRY LOGIC ===
             if position == 0 and int(row.get("signal", 0)) != 0:
+                universe_cfg = raw_spec.get("trading_universe") if isinstance(raw_spec, dict) else {}
+                regime_ok, _ = should_open_position(str(row.get("regime_state") or "unknown"), universe_cfg)
+                if not regime_ok:
+                    continue
                 cx = confluence_breakdown(row, self.config)
                 confluence_score = int(cx["count"])
 
@@ -482,17 +590,68 @@ class Backtester:
                     entry_price = float(row["close"])
                     entry_i = i
                     position_remaining = 1.0
+                    high_since_entry = float(row["high"])
+                    low_since_entry = float(row["low"])
 
                     atr_at_entry = float(atr_at_index(df, i, period=14))
-                    levels = compute_sl_tp(position, entry_price, row, atr_at_entry, self.config)
+                    atr_mult_eff, size_mult_eff = regime_risk_overrides(row, self.config, raw_spec)
+                    levels = compute_sl_tp(
+                        position,
+                        entry_price,
+                        row,
+                        atr_at_entry,
+                        self.config,
+                        atr_multiplier_override=atr_mult_eff,
+                    )
                     stop_loss = levels["stop_loss"]
                     stop_at_entry = stop_loss
                     tp1, tp2, tp3 = levels["tp1"], levels["tp2"], levels["tp3"]
+                    regime_cfg: Dict[str, Any] = {}
+                    exits_cfg = raw_spec.get("exits") if isinstance(raw_spec, dict) else {}
+                    rs = row.get("regime_state")
+                    self._entry_regime_state = "unknown" if pd.isna(rs) else str(rs)
+                    if isinstance(exits_cfg, dict):
+                        regime_cfg = dict(exits_cfg.get(self._entry_regime_state, {}) or {})
+                    if str(self._entry_regime_state) == "trend_down" and self.sweep_trend_down_exits:
+                        regime_cfg = {**regime_cfg, **self.sweep_trend_down_exits}
+                    # Regime-level time stop (e.g. max_holding_hours in YAML)
+                    if regime_cfg.get("max_holding_hours") is not None:
+                        self._active_max_candles = self._max_candles_from_hours(
+                            float(regime_cfg["max_holding_hours"]),
+                            str(self.config.TIMEFRAME),
+                        )
+                    else:
+                        self._active_max_candles = int(self.config.MAX_CANDLES_HOLD)
+                    # Regime-level tp overrides from YAML.
+                    risk_dist = abs(float(entry_price) - float(stop_at_entry))
+                    tp1_ratio = regime_cfg.get("tp1_ratio", self.config.TP1_RATIO)
+                    tp2_ratio = regime_cfg.get("tp2_ratio", self.config.TP2_RATIO)
+                    tp3_ratio = regime_cfg.get("tp3_ratio", self.config.TP3_RATIO)
+                    if tp1_ratio is None:
+                        tp1 = None
+                    else:
+                        tp1 = float(entry_price + risk_dist * float(tp1_ratio)) if position == 1 else float(
+                            entry_price - risk_dist * float(tp1_ratio)
+                        )
+                    if tp2_ratio is not None:
+                        tp2 = float(entry_price + risk_dist * float(tp2_ratio)) if position == 1 else float(
+                            entry_price - risk_dist * float(tp2_ratio)
+                        )
+                    if tp3_ratio is not None:
+                        tp3 = float(entry_price + risk_dist * float(tp3_ratio)) if position == 1 else float(
+                            entry_price - risk_dist * float(tp3_ratio)
+                        )
+                    entry_qty = position_size_risk(
+                        capital=capital,
+                        entry=entry_price,
+                        stop_price=stop_at_entry,
+                        config=self.config,
+                        atr=atr_at_entry,
+                        size_multiplier=size_mult_eff,
+                    )
 
                     df.iloc[i, df.columns.get_loc("position")] = position
 
-                    rs = row.get("regime_state")
-                    self._entry_regime_state = "unknown" if pd.isna(rs) else str(rs)
                     self._entry_regime_gate_allowed = bool(row.get("regime_gate_allowed", True))
 
                     if verbose:
@@ -536,8 +695,7 @@ class Backtester:
                     entry_price,
                     float(row["close"]),
                     position_remaining,
-                    capital,
-                    stop_at_entry,
+                    entry_qty,
                     self.config,
                 )
                 df.iloc[i, df.columns.get_loc("portfolio_value")] = capital + unrealized
@@ -550,15 +708,11 @@ class Backtester:
 
         return df
 
-    def _close_position(
-        self, exit_price: float, position: int, entry: float, remaining: float, capital: float, stop_price: float
-    ) -> float:
-        return self._close_partial(position, exit_price, entry, remaining, capital, stop_price)
+    def _close_position(self, exit_price: float, position: int, entry: float, remaining: float, entry_qty: float) -> float:
+        return self._close_partial(position, exit_price, entry, remaining, entry_qty)
 
-    def _close_partial(
-        self, position: int, exit_price: float, entry: float, pct: float, capital: float, stop_price: float
-    ) -> float:
-        return close_partial_pnl(position, exit_price, entry, pct, capital, stop_price, self.config)
+    def _close_partial(self, position: int, exit_price: float, entry: float, pct: float, entry_qty: float) -> float:
+        return close_partial_pnl(position, exit_price, entry, pct, entry_qty, self.config)
 
     def _clear_playbook_snap(self) -> None:
         self._pb_entry_json = None
@@ -618,9 +772,19 @@ class Backtester:
         capital_after: float,
         exit_row: Optional[pd.Series] = None,
         bars_in_trade: Optional[int] = None,
+        stop_at_entry: Optional[float] = None,
+        exit_reason: Optional[str] = None,
     ):
-        risk_amount = float(self.config.INITIAL_CAPITAL) * float(self.config.RISK_PER_TRADE)
-        r_multiple = float(pnl / risk_amount) if risk_amount > 0 else 0.0
+        resolved_stop = float(stop_at_entry) if stop_at_entry is not None else float(entry)
+        stop_distance = abs(float(entry) - resolved_stop)
+        stop_ratio = (stop_distance / float(entry)) if float(entry) > 0 else 0.0
+        direction = "long" if int(side) == 1 else "short"
+        r_multiple = calculate_r_multiple(
+            entry_price=float(entry),
+            exit_price=float(exit),
+            stop_distance=stop_ratio,
+            direction=direction,
+        )
 
         self.trades.append(
             {
@@ -633,6 +797,7 @@ class Backtester:
                 "pnl": float(pnl),
                 "pnl_pct": float(pnl / float(self.config.INITIAL_CAPITAL)) * 100,
                 "exit_type": exit_type,
+                "exit_reason": exit_reason or str(exit_type),
                 "position_pct": float(position_pct),
                 "r_multiple": r_multiple,
                 "atr_at_entry": float(atr),

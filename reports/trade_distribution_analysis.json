@@ -1,0 +1,43 @@
+{
+  "total_trades": 301,
+  "win_rate": 0.804,
+  "avg_win_r": 0.514,
+  "avg_loss_r": 0.743,
+  "payout_ratio": 0.692,
+  "pf_actual": 2.837,
+  "expectancy_r": 0.267,
+  "worst_loss_hour_utc": 8,
+  "exit_reason_counts": {
+    "BREAKEVEN_SL": 176,
+    "SL_1.0": 94,
+    "SIGNAL_REVERSAL": 27,
+    "TRAIL_TIGHTEN_SL": 4
+  },
+  "pf_leak_diagnosis": "TIGHT_TRAIL",
+  "exit_reason_breakdown": [
+    {
+      "reason": "BREAKEVEN_SL",
+      "pct": 58.47,
+      "avg_r_multiple": 0.5318,
+      "count": 176
+    },
+    {
+      "reason": "SL_1.0",
+      "pct": 31.23,
+      "avg_r_multiple": -0.4149,
+      "count": 94
+    },
+    {
+      "reason": "SIGNAL_REVERSAL",
+      "pct": 8.97,
+      "avg_r_multiple": 0.4565,
+      "count": 27
+    },
+    {
+      "reason": "TRAIL_TIGHTEN_SL",
+      "pct": 1.33,
+      "avg_r_multiple": 3.3955,
+      "count": 4
+    }
+  ]
+}

@@ -5,7 +5,8 @@ trailing stop after TP1, and risk-based position sizing (aligned with backtester
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, Tuple, TypedDict
+import math
 
 import pandas as pd
 
@@ -139,14 +140,22 @@ def format_confluence_pretty(cx: ConfluenceBreakdown, *, min_confluence_required
     )
 
 
-def compute_sl_tp(position: int, entry: float, row: pd.Series, atr: float, config: Config) -> Dict[str, Any]:
+def compute_sl_tp(
+    position: int,
+    entry: float,
+    row: pd.Series,
+    atr: float,
+    config: Config,
+    *,
+    atr_multiplier_override: float | None = None,
+) -> Dict[str, Any]:
     """
     ICT-aware levels:
     - Long: stop = min(ATR stop, liquidity swing low minus buffer) when swing exists.
     - Short: stop = max(ATR stop, liquidity swing high plus buffer).
     - TPs at 1R, 2R, 3R off entry using final risk distance.
     """
-    mult = float(config.ATR_MULTIPLIER)
+    mult = float(atr_multiplier_override) if atr_multiplier_override is not None else float(config.ATR_MULTIPLIER)
     buf = float(config.LIQUIDITY_BUFFER)
     entry = float(entry)
     atr = float(atr)
@@ -195,6 +204,55 @@ def compute_sl_tp(position: int, entry: float, row: pd.Series, atr: float, confi
     }
 
 
+def regime_risk_overrides(row: pd.Series, config: Config, raw_spec: Dict[str, Any]) -> Tuple[float, float]:
+    """
+    Resolve regime-driven risk overrides from spec.
+    Returns: (atr_multiplier_for_stop, size_multiplier_for_risk_amount)
+    """
+    base_atr_mult = float(getattr(config, "ATR_MULTIPLIER", 1.8))
+    size_mult = 1.0
+
+    reg = raw_spec.get("regime") if isinstance(raw_spec, dict) else {}
+    actions = (reg or {}).get("regime_actions") if isinstance(reg, dict) else {}
+    if not isinstance(actions, dict):
+        return base_atr_mult, size_mult
+
+    state = str(row.get("regime_state") or "").strip().lower()
+    atr_pct = float(row.get("regime_atr_pct", 0.0) or 0.0)
+    atr_min = float(getattr(config, "REGIME_ATR_PCT_MIN", 0.35) or 0.35)
+
+    # Map engine states to spec buckets.
+    candidates: List[Dict[str, Any]] = []
+    if state == "ranging" and isinstance(actions.get("ranging"), dict):
+        candidates.append(actions["ranging"])
+    if state in {"trend_up", "trend_down"} and isinstance(actions.get("trending"), dict):
+        candidates.append(actions["trending"])
+    # Directional trend buckets: size/quality tuned separately from generic "trending".
+    if state == "trend_down" and isinstance(actions.get("trend_down"), dict):
+        candidates.append(actions["trend_down"])
+    if state == "trend_up" and isinstance(actions.get("trend_up"), dict):
+        candidates.append(actions["trend_up"])
+    # Optional high-vol overlay; no dedicated high_vol state in annotate_regime.
+    if atr_pct >= (atr_min * 1.75) and isinstance(actions.get("high_vol"), dict):
+        candidates.append(actions["high_vol"])
+
+    atr_mult = base_atr_mult
+    for a in candidates:
+        rps = a.get("reduce_position_size")
+        if rps is not None:
+            try:
+                size_mult *= max(0.05, min(1.0, float(rps)))
+            except Exception:
+                pass
+        w = a.get("widen_stop_atr_multiplier")
+        if w is not None:
+            try:
+                atr_mult = max(atr_mult, float(w))
+            except Exception:
+                pass
+    return atr_mult, size_mult
+
+
 def check_tp_hit(position: int, row: pd.Series, tp_level: float) -> bool:
     if position == 1:
         return float(row["high"]) >= float(tp_level)
@@ -214,11 +272,49 @@ def trail_stop_price(position: int, entry: float, atr_at_entry: float, row: pd.S
     return min(float(entry), float(row["close"]) + trail_distance)
 
 
-def position_size_risk(capital: float, entry: float, stop_price: float, config: Config) -> float:
+def _bars_per_year_from_timeframe(tf: str) -> float:
+    s = str(tf or "").strip().lower()
+    if not s:
+        return 365.0 * 24.0 * 4.0  # fallback: 15m
+    unit = s[-1]
+    try:
+        n = int(s[:-1])
+    except Exception:
+        n = 15
+        unit = "m"
+    mins = {
+        "m": float(n),
+        "h": float(n) * 60.0,
+        "d": float(n) * 1440.0,
+        "w": float(n) * 10080.0,
+    }.get(unit, 15.0)
+    return (365.0 * 24.0 * 60.0) / max(mins, 1.0)
+
+
+def position_size_risk(
+    capital: float,
+    entry: float,
+    stop_price: float,
+    config: Config,
+    *,
+    atr: float = 0.0,
+    size_multiplier: float = 1.0,
+) -> float:
     risk_amount = float(capital) * float(config.RISK_PER_TRADE)
     denom = abs(float(entry) - float(stop_price))
     if denom <= 0:
         denom = float(entry) * 0.01
+    method = str(getattr(config, "SIZING_METHOD", "fixed_risk") or "fixed_risk").lower()
+    if method == "volatility_targeting":
+        atr_pct = (float(atr) / max(float(entry), 1e-12)) if float(atr) > 0 else 0.0
+        if atr_pct > 0:
+            bars_per_year = _bars_per_year_from_timeframe(getattr(config, "TIMEFRAME", "15m"))
+            est_annual_vol = atr_pct * math.sqrt(max(1.0, bars_per_year))
+            target = float(getattr(config, "VOLATILITY_TARGET_ANNUAL", 0.15) or 0.15)
+            scale = target / max(est_annual_vol, 1e-9)
+            # Keep leverage response bounded so sizing remains stable in production.
+            risk_amount *= max(0.25, min(1.5, scale))
+    risk_amount *= max(0.05, float(size_multiplier))
     return risk_amount / denom
 
 
@@ -227,17 +323,17 @@ def close_partial_pnl(
     exit_price: float,
     entry: float,
     fraction: float,
-    capital: float,
-    stop_price: float,
+    entry_qty: float,
     config: Config,
 ) -> float:
     exit_price = float(exit_price)
     entry = float(entry)
     pnl_pct = (exit_price - entry) / entry if position == 1 else (entry - exit_price) / entry
-    sz = position_size_risk(capital, entry, stop_price, config)
-    pnl = pnl_pct * sz * float(fraction) * entry
-    commission = abs(pnl) * float(config.COMMISSION)
-    slippage = abs(pnl) * float(config.SLIPPAGE)
+    qty = max(0.0, float(entry_qty) * float(fraction))
+    pnl = pnl_pct * qty * entry
+    turnover = qty * (abs(entry) + abs(exit_price))
+    commission = turnover * float(config.COMMISSION)
+    slippage = turnover * float(config.SLIPPAGE)
     return float(pnl - commission - slippage)
 
 
@@ -246,12 +342,11 @@ def unrealized_pnl(
     entry: float,
     current: float,
     remaining_fraction: float,
-    capital: float,
-    stop_price: float,
+    entry_qty: float,
     config: Config,
 ) -> float:
     current = float(current)
     entry = float(entry)
     pnl_pct = (current - entry) / entry if position == 1 else (entry - current) / entry
-    sz = position_size_risk(capital, entry, stop_price, config)
-    return float(pnl_pct * sz * float(remaining_fraction) * entry)
+    qty = max(0.0, float(entry_qty) * float(remaining_fraction))
+    return float(pnl_pct * qty * entry)

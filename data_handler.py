@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pandas as pd
 import requests
 from datetime import datetime, timedelta, timezone
@@ -28,6 +31,22 @@ class DataHandler:
 
     def fetch_historical_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         """Fetch historical klines from Binance (uses disk cache when enabled)."""
+        parq = os.environ.get("BINANCE_KLINES_PARQUET", "").strip()
+        if parq:
+            p = Path(parq)
+            if p.is_file():
+                if p.suffix.lower() in (".parquet", ".pq"):
+                    df = pd.read_parquet(p)
+                else:
+                    df = pd.read_pickle(p)
+                if "timestamp" not in df.columns and df.index.name == "timestamp":
+                    df = df.reset_index()
+                if "timestamp" in df.columns:
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+                if df.index.name is None and "timestamp" in df.columns:
+                    df = df.set_index("timestamp", drop=False)
+                return df
+
         if cache_enabled():
             cpath = cache_path(
                 symbol=self.config.SYMBOL,

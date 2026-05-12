@@ -1,0 +1,27 @@
+{
+  "track": "quantrex_baseline",
+  "source": "quantrex_api_backtest",
+  "generated_at_utc": "2026-04-27T09:19:57.579699+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "request": {
+    "start_date": "2024-01-01",
+    "end_date": "2026-04-24"
+  },
+  "metrics": {
+    "profit_factor": 1.06,
+    "max_drawdown": -0.43,
+    "expectancy": 2.29,
+    "total_trades": 29.0,
+    "unique_entries": 16.0,
+    "win_rate": 89.66,
+    "total_pnl": 66.45,
+    "sharpe_ratio": 0.05
+  },
+  "meta": {
+    "run_id": 4,
+    "api_success": true
+  }
+}

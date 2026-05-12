@@ -1,0 +1,15 @@
+{
+  "paper_loop_running": true,
+  "dom_collector_running": true,
+  "signal_last_24h_rows": 4,
+  "dom_last_24h_rows": 6,
+  "preflight_snapshot": {
+    "ready_for_day7": false,
+    "dom_audit_lines": 607,
+    "signal_audit_lines": 43,
+    "merged_with_dom_imbalance": 19,
+    "checked_at": "2026-05-02T19:22:26.088948+00:00"
+  },
+  "ready_for_day7": false,
+  "checked_at": "2026-05-10T15:45:47.559213+00:00"
+}

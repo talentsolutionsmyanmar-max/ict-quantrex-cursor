@@ -1,0 +1,40 @@
+trading_universe:
+  allowed_regimes: ["trend_up", "trend_down"]
+  banned_regimes: ["chop", "ranging", "high_vol"]
+
+regime_confirmation:
+  min_consecutive_candles: 3
+  adx_threshold: 25
+  structure_break_required: true
+
+exits:
+  stop_loss_r: 1.0
+  trend_up:
+    tp1_ratio: null
+    tp2_ratio: 1.8
+    close_pct_at_tp2: 0.40
+    trail_remaining: true
+    trail_start_r: 1.5
+    trail_distance_r: 0.6
+  trend_down:
+    breakeven_at_r: 0.3
+    breakeven_move_to_r: 0.1
+    tp1_ratio: null
+    close_pct_at_tp1: 0.30
+    tp2_ratio: 2.0
+    close_pct_at_tp2: 0.30
+    trail_remaining: true
+    trail_start_r: 2.0
+    trail_distance_r: 0.8
+    runner_allocation_pct: 0.30
+    runner_trail_distance_r: 1.1
+    trail_type: "chandelier"
+    max_holding_hours: 36
+
+risk:
+  risk_per_trade: 0.012
+  volatility_targeting: 0.20
+  max_concurrent_positions: 1
+  symbol_allocation:
+    BTCUSDT: 0.60
+    ETHUSDT: 0.40

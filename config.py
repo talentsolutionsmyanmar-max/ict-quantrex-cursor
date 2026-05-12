@@ -43,6 +43,8 @@ class Config:
     # === RISK MANAGEMENT (FIXED) ===
     INITIAL_CAPITAL = 10000
     RISK_PER_TRADE = 0.01  # 1.0% of capital at risk per trade
+    SIZING_METHOD = "fixed_risk"  # fixed_risk | volatility_targeting
+    VOLATILITY_TARGET_ANNUAL = 0.15
     ATR_MULTIPLIER = 1.8  # Stop = 1.8x ATR
     MIN_CONFLUENCE = 2  # Min ICT factors for entry
     MIN_SIGNAL_STRENGTH = 68  # Min signal strength

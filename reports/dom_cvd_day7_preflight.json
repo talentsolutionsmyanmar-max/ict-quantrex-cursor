@@ -1,0 +1,17 @@
+{
+  "dom_audit_exists": true,
+  "dom_audit_lines": 607,
+  "signal_audit_exists": true,
+  "signal_audit_lines": 43,
+  "tracker_exists": true,
+  "tracker_lines": 1,
+  "dom_time_span_hours": 5.9,
+  "signal_time_span_hours": 106.3,
+  "merged_samples": 43,
+  "merged_with_dom_imbalance": 19,
+  "regime_distribution": {
+    "ranging": 43
+  },
+  "ready_for_day7": false,
+  "checked_at": "2026-05-02T19:22:26.088948+00:00"
+}

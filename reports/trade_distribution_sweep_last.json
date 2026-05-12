@@ -1,0 +1,18 @@
+{
+  "total_trades": 292,
+  "win_rate": 0.747,
+  "avg_win_r": 0.674,
+  "avg_loss_r": 0.742,
+  "payout_ratio": 0.909,
+  "pf_actual": 2.677,
+  "expectancy_r": 0.315,
+  "worst_loss_hour_utc": 8,
+  "exit_reason_counts": {
+    "SL_1.0": 125,
+    "BREAKEVEN_SL": 80,
+    "SIGNAL_REVERSAL": 68,
+    "TRAIL_TIGHTEN_SL": 16,
+    "TIME_EXIT": 3
+  },
+  "pf_leak_diagnosis": "TIGHT_TRAIL"
+}

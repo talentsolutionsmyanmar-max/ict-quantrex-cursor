@@ -1,0 +1,33 @@
+{
+  "track": "vibe_candidate_001",
+  "source": "vibe_trading_backtest",
+  "generated_at_utc": "2026-04-27T00:00:00+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "request": {
+    "symbol_scope": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "timeframe": "15m",
+    "notes": "Fill with exact assumptions used in Vibe run."
+  },
+  "metrics": {
+    "profit_factor": 1.25,
+    "max_drawdown": 6.4,
+    "expectancy": 3.1,
+    "total_trades": 148,
+    "unique_entries": 92,
+    "win_rate": 57.3,
+    "total_pnl": 1240.5,
+    "sharpe_ratio": 0.92
+  },
+  "meta": {
+    "candidate_prompt": "Paste the Vibe prompt or strategy id here.",
+    "engine_version": "vibe-trading-x.y.z",
+    "normalization_notes": "Ensure drawdown is percent and unique_entries is entry count, not split exits."
+  }
+}

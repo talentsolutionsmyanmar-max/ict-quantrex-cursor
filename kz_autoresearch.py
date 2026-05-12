@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from config import Config
+from gbrain_controller import evaluate_promotion_candidate
+from promotion_store import insert_promotion_decision
 from research_lab import run_evolution
 from session_clock import get_session_state
 
@@ -116,6 +118,8 @@ def run_kz_research_job(
 
     err: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
+    promotion: Optional[Dict[str, Any]] = None
+    decision_id: Optional[int] = None
     try:
         result = run_evolution(
             symbol=sym,
@@ -128,6 +132,18 @@ def run_kz_research_job(
             seed=None,
             verify_top_k_crisis=vk,
             runtime_cfg=cfg,
+        )
+        # Gbrain controller: always record GO/HOLD for audit even in unattended loops.
+        promotion = evaluate_promotion_candidate(result)
+        decision_id = insert_promotion_decision(
+            decision=str(promotion.get("decision") or "HOLD"),
+            note=str(promotion.get("note") or "gbrain autoresearch"),
+            rank1_genes=promotion.get("rank1_genes") if isinstance(promotion.get("rank1_genes"), dict) else {},
+            aggregate=promotion.get("aggregate") if isinstance(promotion.get("aggregate"), dict) else {},
+            verify_window=promotion.get("verify_window") if isinstance(promotion.get("verify_window"), list) else [],
+            symbols=promotion.get("symbols") if isinstance(promotion.get("symbols"), list) else [],
+            source="gbrain-autoresearch",
+            cqe_ack=bool(promotion.get("cqe_ack")),
         )
     except Exception as e:
         err = str(e)
@@ -144,7 +160,14 @@ def run_kz_research_job(
         result=result,
         error=err,
     )
-    return {"run_id": rid, "error": err, "result": result, "trigger_tag": trigger_tag}
+    return {
+        "run_id": rid,
+        "error": err,
+        "result": result,
+        "trigger_tag": trigger_tag,
+        "promotion": promotion,
+        "decision_id": decision_id,
+    }
 
 
 def _debounced(min_gap_sec: float) -> bool:

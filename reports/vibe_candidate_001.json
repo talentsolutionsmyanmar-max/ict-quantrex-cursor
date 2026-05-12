@@ -1,0 +1,31 @@
+{
+  "track": "vibe_candidate_001",
+  "source": "vibe_trading_backtest",
+  "generated_at_utc": "2026-04-27T09:32:47.559560+00:00",
+  "window": {
+    "start": "2024-01-01",
+    "end": "2026-04-24"
+  },
+  "request": {
+    "symbol_scope": [
+      "BTCUSDT"
+    ],
+    "timeframe": "15m",
+    "notes": "Auto-generated via scripts/run_vibe_batch_candidates.py"
+  },
+  "metrics": {
+    "profit_factor": 0.2599,
+    "max_drawdown": 53.0839,
+    "expectancy": -0.1307,
+    "total_trades": 406.0,
+    "unique_entries": 406.0,
+    "win_rate": 20.197,
+    "total_pnl": -53.0839,
+    "sharpe_ratio": -73.82751787890112
+  },
+  "meta": {
+    "candidate_prompt": "Create one crypto strategy candidate (ICT + FVG + sweep confirmation with strict risk controls). Run backtest summary for BTCUSDT 15m from 2024-01-01 to 2026-04-24. Return full metrics.",
+    "engine_version": "vibe-trading-ai 0.1.5",
+    "normalization_notes": "unique_entries approximated by trade_count from Vibe runner output."
+  }
+}

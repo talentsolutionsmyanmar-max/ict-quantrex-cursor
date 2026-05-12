@@ -1,0 +1,15 @@
+circuit_breaker:
+  SOLUSDT:
+    enabled: false
+    reenable_conditions:
+      rolling_pf_30d: ">= 0.90"
+      rolling_dd_30d: "<= 3.0"
+      min_expectancy_r: ">= 0.15"
+  BTCUSDT:
+    enabled: true
+    risk_multiplier: 0.85
+  ETHUSDT:
+    enabled: true
+    risk_multiplier: 0.90
+  max_concurrent_positions: 2
+  correlation_penalty: 0.15

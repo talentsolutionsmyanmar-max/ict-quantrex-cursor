@@ -1,0 +1,326 @@
+[
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_0",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_1",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_2",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_3",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_4",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_5",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_6",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_7",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_8",
+    "params": {
+      "breakeven_move_to_r": 0.05,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_9",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_10",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_11",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_12",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_13",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_14",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_15",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_16",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_17",
+    "params": {
+      "breakeven_move_to_r": 0.1,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_18",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_19",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_20",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.8,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_21",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_22",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_23",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 0.9,
+      "runner_allocation_pct": 0.3
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_24",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.0
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_25",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.25
+    }
+  },
+  {
+    "total_trades": 0,
+    "pf_actual": 0.0,
+    "expectancy_r": 0.0,
+    "exit_reason_counts": {},
+    "id": "combo_26",
+    "params": {
+      "breakeven_move_to_r": 0.15,
+      "trail_distance_r": 1.0,
+      "runner_allocation_pct": 0.3
+    }
+  }
+]

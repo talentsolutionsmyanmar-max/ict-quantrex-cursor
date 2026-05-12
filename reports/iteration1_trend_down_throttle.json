@@ -1,0 +1,50 @@
+{
+  "window": {
+    "symbol": "BTCUSDT",
+    "timeframe": "15m",
+    "start": "2024-04-01",
+    "end": "2024-06-30",
+    "capital": 10000.0
+  },
+  "summary": {
+    "closed_trades": 2,
+    "expectancy": 6.01,
+    "max_drawdown_pct": -0.09,
+    "win_rate": 100.0,
+    "profit_factor": 999.0
+  },
+  "sl": {
+    "count": 0,
+    "hit_rate_closed": 0.0,
+    "avg_sl_loss": 0.0
+  },
+  "tp": {
+    "TP1": {
+      "count": 1,
+      "rate_closed": 0.5,
+      "avg_pnl": 4.718012276184796,
+      "win_rate": 1.0
+    },
+    "TP2": {
+      "count": 0,
+      "rate_closed": 0.0,
+      "avg_pnl": 0.0,
+      "win_rate": 0.0
+    },
+    "TP3": {
+      "count": 0,
+      "rate_closed": 0.0,
+      "avg_pnl": 0.0,
+      "win_rate": 0.0
+    }
+  },
+  "by_regime": {
+    "ranging": {
+      "trades": 2,
+      "expectancy": 6.0092502328664175,
+      "max_drawdown_pnl": 4.718012276184796,
+      "win_rate": 100.0
+    }
+  },
+  "note": "profit_factor 999.0 is the backtester sentinel when there are zero losing legs in the window."
+}

@@ -39,6 +39,7 @@ from strategy.load_spec import read_raw_spec
 from monitoring.signal_audit import log_signal_decision
 from monitoring.supabase_rest_logger import log_trade_to_supabase
 from research.meta_hypothesis_logger import generate_auto_hypothesis, log_trade_postmortem
+from core.scoring_hook import HybridScoringHook
 from core.signal_generator import should_open_position
 from core.exit_engine import apply_regime_exit_logic, calculate_r_multiple
 from core.live_market_feed import LiveMarketFeed
@@ -855,6 +856,7 @@ if __name__ == "__main__":
             print("STARTING LIVE PAPER TRADING LOOP")
             feed = LiveMarketFeed(exchange_symbol, timeframe=str(config.TIMEFRAME))
             raw = read_raw_spec()
+            hybrid_hook = HybridScoringHook(raw)
             exits_cfg = raw.get("exits") if isinstance(raw, dict) else {}
             universe_cfg = raw.get("trading_universe") if isinstance(raw, dict) else {}
             d = feed.fetch_live_candles(limit=220)
@@ -902,6 +904,18 @@ if __name__ == "__main__":
                             "strength": signal_strength,
                             "confluence": confluence_n,
                         }
+                        direction = "long" if signal == 1 else ("short" if signal == -1 else "neutral")
+                        signals_for_hook = [
+                            {"direction": direction, "confluence_score": float(signal_strength)}
+                        ]
+                        try:
+                            signals_for_hook = hybrid_hook.apply(signals_for_hook, d.copy())
+                        except Exception as e:
+                            logger.error(
+                                "HybridScoringHook failed: %s. Falling back to ICT-only.",
+                                e,
+                                exc_info=True,
+                            )
                         decision = "SKIP"
                         skip_reason = "no_confluence"
                         if not allowed:

@@ -36,7 +36,12 @@ from trade_playbook import record_playbook_event
 from paper_alerts import notify_paper_exit, notify_paper_open
 from risk_engine import RiskEngine
 from strategy.load_spec import read_raw_spec
-from monitoring.signal_audit import log_signal_decision
+from monitoring.signal_audit import (
+    append_signal_audit_jsonl,
+    log_signal_decision,
+    merge_pattern_flags,
+    pattern_flags_from_row,
+)
 from monitoring.supabase_rest_logger import log_trade_to_supabase
 from research.meta_hypothesis_logger import generate_auto_hypothesis, log_trade_postmortem
 from core.scoring_hook import HybridScoringHook
@@ -344,7 +349,8 @@ class PaperTrader:
                             "confluence": 0,
                             "decision": "SKIP",
                             "skip_reason": regime_msg,
-                        }
+                        },
+                        row=row,
                     )
                 except Exception:
                     pass
@@ -361,7 +367,8 @@ class PaperTrader:
                             "confluence": 0,
                             "decision": "SKIP",
                             "skip_reason": "max_concurrent_positions",
-                        }
+                        },
+                        row=row,
                     )
                 except Exception:
                     pass
@@ -386,7 +393,8 @@ class PaperTrader:
                                 "corr_ok": False,
                                 "decision": "SKIP",
                                 "skip_reason": "; ".join(gate_msgs),
-                            }
+                            },
+                            row=row,
                         )
                     except Exception:
                         pass
@@ -623,7 +631,8 @@ class PaperTrader:
                             "fvg": bool(cx.get("flags", {}).get("fvg")) if isinstance(cx.get("flags"), dict) else False,
                             "decision": "SKIP",
                             "skip_reason": "confluence_or_strength",
-                        }
+                        },
+                        row=row,
                     )
                 except Exception:
                     pass
@@ -930,18 +939,20 @@ if __name__ == "__main__":
                             decision = "ENTER"
                             skip_reason = None
 
-                        audit = {
-                            "ts": datetime.now(timezone.utc).isoformat(),
-                            "symbol": exchange_symbol.replace("/", ""),
-                            "regime": regime_state,
-                            "price": float(live_price),
-                            "decision": decision,
-                            "skip_reason": skip_reason,
-                            "confluence": confluence_n,
-                            "signal_strength": signal_strength,
-                        }
-                        with audit_path.open("a", encoding="utf-8") as f:
-                            f.write(json.dumps(audit) + "\n")
+                        audit = merge_pattern_flags(
+                            {
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                                "symbol": exchange_symbol.replace("/", ""),
+                                "regime": regime_state,
+                                "price": float(live_price),
+                                "decision": decision,
+                                "skip_reason": skip_reason,
+                                "confluence": confluence_n,
+                                "signal_strength": signal_strength,
+                            },
+                            last,
+                        )
+                        append_signal_audit_jsonl(audit, audit_path)
 
                         if bool(args.debug_signals):
                             print(

@@ -7,9 +7,44 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping, Optional, Union
+
+RowLike = Union[Mapping[str, Any], Any]
 
 DB_PATH = Path(__file__).resolve().parents[1] / "data" / "signal_audit.db"
+JSONL_PATH = Path(__file__).resolve().parents[1] / "data" / "signal_audit.jsonl"
+
+
+def pattern_flags_from_row(row: RowLike) -> Dict[str, bool]:
+    """ICT layer-1 pattern presence (independent of signal direction / gates)."""
+    get = row.get if hasattr(row, "get") else lambda k, d=False: getattr(row, k, d)
+
+    def _bool(key: str) -> bool:
+        v = get(key, False)
+        return bool(v) if v is not None else False
+
+    return {
+        "fvg_detected": _bool("bullish_fvg") or _bool("bearish_fvg"),
+        "sweep_detected": _bool("bullish_sweep") or _bool("bearish_sweep"),
+    }
+
+
+def merge_pattern_flags(decision_data: Dict[str, Any], row: Optional[RowLike] = None) -> Dict[str, Any]:
+    out = dict(decision_data)
+    if row is None:
+        return out
+    flags = pattern_flags_from_row(row)
+    out.update(flags)
+    if "fvg" not in out:
+        out["fvg"] = flags["fvg_detected"]
+    return out
+
+
+def append_signal_audit_jsonl(record: Dict[str, Any], path: Optional[Path] = None) -> None:
+    target = path or JSONL_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def _utc_now() -> str:
@@ -40,9 +75,11 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-def log_signal_decision(decision_data: Dict[str, Any]) -> None:
+def log_signal_decision(decision_data: Dict[str, Any], row: Optional[RowLike] = None) -> None:
+    decision_data = merge_pattern_flags(decision_data, row)
     conn = _connect()
     try:
+        fvg_ok = bool(decision_data.get("fvg")) or bool(decision_data.get("fvg_detected"))
         conn.execute(
             """
             INSERT INTO signal_audit
@@ -53,9 +90,9 @@ def log_signal_decision(decision_data: Dict[str, Any]) -> None:
                 str(decision_data.get("ts") or _utc_now()),
                 str(decision_data.get("symbol") or ""),
                 str(decision_data.get("regime") or ""),
-                float(decision_data.get("strength") or 0.0),
+                float(decision_data.get("strength") or decision_data.get("signal_strength") or 0.0),
                 float(decision_data.get("confluence") or 0.0),
-                1 if bool(decision_data.get("fvg")) else 0,
+                1 if fvg_ok else 0,
                 1 if bool(decision_data.get("corr_ok", True)) else 0,
                 str(decision_data.get("decision") or "UNKNOWN"),
                 str(decision_data.get("skip_reason") or ""),

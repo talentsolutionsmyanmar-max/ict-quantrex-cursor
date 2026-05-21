@@ -68,14 +68,14 @@ ict:
   ote_levels: [0.62, 0.705, 0.79]
   fvg:
     method: "adaptive"
-    min_gap_atr: 0.35
+    min_gap_atr: 0.28
     confirmation_candles: 1
     mitigation_filter: true
     ignore_mitigated: true
   liquidity:
     sweep_confirmation: "close_beyond"
     retest_required: false
-    volume_spike_factor: 1.5
+    volume_spike_factor: 0
 
 risk:
   initial_capital: 10000
@@ -164,7 +164,7 @@ regime:
   regime_actions:
     ranging:
       max_positions: 1
-      require_fvg_confirmation: true
+      require_fvg_confirmation: false
     trending:
       allow_pyramiding: false
     # Iteration 1 (validation sprint): cut size + raise entry quality in bearish trends only.
